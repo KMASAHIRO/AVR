@@ -215,6 +215,7 @@ class AVR_Runner():
 
                         valid_losses = {'spec_loss': 0, 'fft_loss': 0, 'time_loss': 0, 'energy_loss': 0, 'multi_stft_loss': 0}
                         valid_metrics = {'Angle': 0, 'Amplitude': 0, 'Envelope': 0, 'T60': 0, 'C50': 0, 'EDT': 0, 'multi_stft': 0}
+                        valid_metrics_for_std = {'Angle': [], 'Amplitude': [], 'Envelope': [], 'T60': [], 'C50': [], 'EDT': [], 'multi_stft': []}
 
                         for check_idx, test_batch in enumerate(self.test_iter):
                             with torch.no_grad():
@@ -235,6 +236,9 @@ class AVR_Runner():
 
                             for key in valid_metrics:
                                 valid_metrics[key] += metrics[key]
+                            
+                            for key in valid_metrics_for_std:
+                                valid_metrics_for_std[key].append(metrics[key])
 
                             if check_idx < 15:                                
                                 save_dir = os.path.join(self.logdir, self.expname, f'img_test/{str(self.current_iteration//1000).zfill(4)}_{str(check_idx).zfill(5)}.png')
@@ -246,15 +250,20 @@ class AVR_Runner():
                         num_batches = len(self.test_iter)
                         avg_losses = {key: valid_losses[key] / num_batches for key in valid_losses}
                         avg_metrics = {key: valid_metrics[key] / num_batches for key in valid_metrics}
+                        std_metrics = {key: np.std(valid_metrics_for_std[key]) for key in valid_metrics_for_std}
 
-                        self.log_tensorboard(losses=avg_losses, metrics=avg_metrics, cur_iter=self.current_iteration, mode_set="test")
+                        self.log_tensorboard(losses=avg_losses, metrics=avg_metrics, metrics_std=std_metrics, cur_iter=self.current_iteration, mode_set="test")
                         self.logger.info("Evaluations. Current Iteration:%d", self.current_iteration)
 
                         self.logger.info('Angle:{:.3f}, Amplitude:{:.4f}, Envelope:{:.4f}, T60:{:.5f}, C50:{:.5f}, EDT:{:.5f}, multi_stft:{:.4f}'.format( \
                         avg_metrics['Angle'], avg_metrics['Amplitude'], avg_metrics['Envelope'], avg_metrics['T60'], avg_metrics['C50'], avg_metrics['EDT'], avg_metrics['multi_stft']))
-                            
+
+                        self.logger.info('STD Angle:{:.3f}, Amplitude:{:.4f}, Envelope:{:.4f}, T60:{:.5f}, C50:{:.5f}, EDT:{:.5f}, multi_stft:{:.4f}'.format( \
+                        std_metrics['Angle'], std_metrics['Amplitude'], std_metrics['Envelope'], std_metrics['T60'], std_metrics['C50'], std_metrics['EDT'], std_metrics['multi_stft']))
+
                         train_losses = {'spec_loss': 0, 'fft_loss': 0, 'time_loss': 0, 'energy_loss': 0, 'multi_stft_loss': 0}
                         train_metrics = {'Angle': 0, 'Amplitude': 0, 'Envelope': 0, 'T60': 0, 'C50': 0, 'EDT': 0, 'multi_stft': 0}
+                        train_metrics_for_std = {'Angle': [], 'Amplitude': [], 'Envelope': [], 'T60': [], 'C50': [], 'EDT': [], 'multi_stft': []}
 
                         for check_idx, train_iter_batch in enumerate(self.train_iter_show):
                             with torch.no_grad():
@@ -275,6 +284,9 @@ class AVR_Runner():
 
                             for key in train_metrics:
                                 train_metrics[key] += metrics[key]
+                            
+                            for key in train_metrics_for_std:
+                                train_metrics_for_std[key].append(metrics[key])
 
                             if check_idx < 15:
                                 save_dir = os.path.join(self.logdir, self.expname, f'img_train/{str(self.current_iteration//1000).zfill(4)}_{str(check_idx).zfill(5)}.png')
@@ -284,12 +296,16 @@ class AVR_Runner():
                                 num_batches = check_idx + 1
                                 avg_losses = {key: train_losses[key] / num_batches for key in train_losses}
                                 avg_metrics = {key: train_metrics[key] / num_batches for key in train_metrics}
+                                std_metrics = {key: np.std(train_metrics_for_std[key]) for key in train_metrics_for_std}
 
-                                self.log_tensorboard(losses=avg_losses, metrics=avg_metrics, cur_iter=self.current_iteration, mode_set="train")
+                                self.log_tensorboard(losses=avg_losses, metrics=avg_metrics, metrics_std=std_metrics, cur_iter=self.current_iteration, mode_set="train")
                                 
                                 self.logger.info("Evaluations on training set")
                                 self.logger.info('Angle:{:.3f}, Amplitude:{:.4f}, Envelope:{:.4f}, T60:{:.5f}, C50:{:.5f}, EDT:{:.5f}, multi_stft:{:.4f}'.format( \
                                 avg_metrics['Angle'], avg_metrics['Amplitude'], avg_metrics['Envelope'], avg_metrics['T60'], avg_metrics['C50'], avg_metrics['EDT'], avg_metrics['multi_stft']))
+
+                                self.logger.info('STD Angle:{:.3f}, Amplitude:{:.4f}, Envelope:{:.4f}, T60:{:.5f}, C50:{:.5f}, EDT:{:.5f}, multi_stft:{:.4f}'.format( \
+                                std_metrics['Angle'], std_metrics['Amplitude'], std_metrics['Envelope'], std_metrics['T60'], std_metrics['C50'], std_metrics['EDT'], std_metrics['multi_stft']))
                                 
                                 break
 
@@ -328,12 +344,15 @@ class AVR_Runner():
 
         return losses, metrics, ori_time, pred_time
 
-    def log_tensorboard(self, losses=None, metrics=None, cur_iter=None, mode_set="train"):
+    def log_tensorboard(self, losses=None, metrics=None, metrics_std=None, cur_iter=None, mode_set="train"):
         for loss_name, value in losses.items():
             self.writer.add_scalar(f'{mode_set}_loss/{loss_name}', value, cur_iter)
     
         for metric_name, value in metrics.items():
             self.writer.add_scalar(f'{mode_set}_metric/{metric_name}', value, cur_iter)
+        
+        for metric_name, value in metrics_std.items():
+            self.writer.add_scalar(f'{mode_set}_metric_std/{metric_name}', value, cur_iter)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
