@@ -1,0 +1,9 @@
+torch
+numpy
+scipy
+matplotlib
+librosa
+auraloss
+pyyaml
+tqdm
+tensorboard
