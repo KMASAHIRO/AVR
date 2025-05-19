@@ -62,7 +62,7 @@ class AVRRender(nn.Module):
             network_dir_tx = direction_tx.unsqueeze(1).expand(*network_pts.size()) # [bs, N_rays * N_samples, 3]
 
         torch.cuda.empty_cache()
-        log_gpu_memory(f"Before network")
+        #log_gpu_memory(f"Before network")
 
         # get network output
         if direction_tx is not None:
@@ -73,7 +73,7 @@ class AVRRender(nn.Module):
         signal = signal.view(bs, -1, self.n_samples, signal.size(-1)) # [bs, N_rays, N_samples, N_lenseq]
 
         torch.cuda.empty_cache()
-        log_gpu_memory(f"After network")
+        #log_gpu_memory(f"After network")
 
         # bounce points to rx delay samples
         pts2rx_idx = self.fs * d_vals / self.speed  # [N_samples] 
@@ -90,7 +90,7 @@ class AVRRender(nn.Module):
         signal = signal * zero_mask_tx2pts  # [bs, N_rays, N_samples, N_lenseq]
 
         torch.cuda.empty_cache()
-        log_gpu_memory(f"After samples")
+        #log_gpu_memory(f"After samples")
 
         # apply 1/d attenuations in time domain by shifting the samples
         prev_part = int(0.1 / self.speed * self.fs)
@@ -100,16 +100,16 @@ class AVRRender(nn.Module):
         path_loss_all = torch.stack([path_loss[i:i+signal.size(-1)] for i in shift_samples.detach().cpu().numpy().astype(int)])
 
         torch.cuda.empty_cache()
-        log_gpu_memory(f"After time shift")
+        #log_gpu_memory(f"After time shift")
 
         # Apply fft, and phase shift
         fft_sig = torch.fft.rfft(signal.float() * path_loss_all, dim=-1)
-        log_gpu_memory(f"After torch.fft.rfft")
+        #log_gpu_memory(f"After torch.fft.rfft")
         phase_shift = torch.exp(-1j*2*np.pi/signal.size(-1)*torch.arange(0, signal.size(-1)//2+1).cuda().unsqueeze(0)*pts2rx_idx.unsqueeze(1))
         shifted_signal = fft_sig * phase_shift
 
         torch.cuda.empty_cache()
-        log_gpu_memory(f"After fft")
+        #log_gpu_memory(f"After fft")
         
         # audio signal rendering for each ray
         batch_n_rays_signal = acoustic_render(attn, shifted_signal, d_vals)  # [bs, N_rays, N_lenseq] 
@@ -120,7 +120,7 @@ class AVRRender(nn.Module):
         # split into real and imagenary part for multi gpu training
         receive_sig = torch.cat([torch.real(receive_sig).unsqueeze(-1), torch.imag(receive_sig).unsqueeze(-1)], dim=-1) # [bs, N_lenseq, 2]
         torch.cuda.empty_cache()
-        log_gpu_memory(f"After forward")
+        #log_gpu_memory(f"After forward")
         return receive_sig
     
 
