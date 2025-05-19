@@ -7,4 +7,5 @@ auraloss
 pyyaml
 tqdm
 tensorboard
+wheel
 git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch

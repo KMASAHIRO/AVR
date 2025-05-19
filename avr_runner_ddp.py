@@ -83,7 +83,7 @@ class AVR_Runner():
         self.renderer = AVRRender(networks_fn=audionerf, **kwargs_render) # renderer
 
         # multi gpu
-        if torch.cuda.device_count() > 1:
+        if torch.cuda.device_count() >= 1:
             # DDP の初期化
             #dist.init_process_group(backend="nccl")
             # DDP 初期化
