@@ -2,7 +2,7 @@
 
 ### Path settings
 path:
-  expname: Meshrir
+  expname: Meshrir_2
   dataset_type: MeshRIR
   logdir: logs/MeshRIR/
 
