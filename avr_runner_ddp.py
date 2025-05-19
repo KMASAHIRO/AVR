@@ -434,7 +434,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='train')
     parser.add_argument('--config', type=str, default='avr.yml', help='config file path')
     parser.add_argument('--dataset_dir', type=str, default='S1-M3969_npy')
-    parser.add_argument('--batch_size', type=int, default=3)
+    parser.add_argument('--batch_size', type=int, default=4)
     args = parser.parse_args()
 
 
