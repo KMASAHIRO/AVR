@@ -2,48 +2,47 @@
 
 ### Path settings
 path:
-  expname: Meshrir_paper
-  dataset_type: MeshRIR
-  logdir: logs/MeshRIR/
+  expname: Real_env_1
+  dataset_type: Real_env
+  logdir: logs/real_env/
 
 
 ### rendering settings
 render:
-  xyz_min: -6
-  xyz_max:  6
+  xyz_min: -10
+  xyz_max:  10
   near: 0
-  far: 4
+  far: 6
   n_samples: 64
-  n_azi: 80
-  n_ele: 40
+  n_azi: 64
+  n_ele: 32
   speed: 343.8
-  fs: 24000
+  fs: 16000
   pathloss: 1.5
 
 
 ### training settings
 train:
-  lr: 1e-3
+  lr: 5e-4
   weight_decay: 0
-  T_max: 200000
-  eta_min: 1e-4
-  total_iterations: 200000
+  T_max: 500000
+  eta_min: 5e-5
+  total_iterations: 500000
   load_ckpt: False
   save_freq: 20000
   val_freq: 20000
 
-  spec_loss_weight: 1
-  amplitude_loss_weight: 0.5
-  angle_loss_weight: 0.5
-  time_loss_weight: 100
-  energy_loss_weight: 5
+  spec_loss_weight: 2
+  amplitude_loss_weight: 4
+  angle_loss_weight: 1
+  time_loss_weight: 50
+  energy_loss_weight: 1
   multistft_loss_weight: 1
-
 
 
 ### model settings  
 model: 
-  signal_output_dim: 2400
+  signal_output_dim: 1600
   leaky_relu: 0.03
 
   pos_encoding_sigma:
@@ -55,7 +54,7 @@ model:
 
   dir_encoding_sig:
     base_resolution: 16
-    log2_hashmap_size: 20
+    log2_hashmap_size: 18
     n_features_per_level: 2
     n_levels: 20
     otype: HashGrid

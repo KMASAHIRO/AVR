@@ -2,7 +2,7 @@
 
 ### Path settings
 path:
-  expname: Meshrir_paper
+  expname: Meshrir_angle50
   dataset_type: MeshRIR
   logdir: logs/MeshRIR/
 
@@ -23,10 +23,10 @@ render:
 
 ### training settings
 train:
-  lr: 1e-3
+  lr: 5e-4
   weight_decay: 0
   T_max: 200000
-  eta_min: 1e-4
+  eta_min: 5e-5
   total_iterations: 200000
   load_ckpt: False
   save_freq: 20000
@@ -34,7 +34,7 @@ train:
 
   spec_loss_weight: 1
   amplitude_loss_weight: 0.5
-  angle_loss_weight: 0.5
+  angle_loss_weight: 50
   time_loss_weight: 100
   energy_loss_weight: 5
   multistft_loss_weight: 1

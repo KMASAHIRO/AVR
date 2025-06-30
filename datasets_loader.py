@@ -45,6 +45,8 @@ class WaveLoader(Dataset):
             self.load_raf(base_folder, eval, seq_len, fs)
         elif dataset_type == 'Simu':
             self.load_simu(base_folder, eval, seq_len, fs)
+        elif dataset_type == 'Real_env':
+            self.load_real_env(base_folder, eval, seq_len, fs)
         else:
             raise ValueError("Unsupported dataset type")
 
