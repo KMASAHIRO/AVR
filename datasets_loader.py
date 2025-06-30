@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pickle
 import torch
 from torch.utils.data import Dataset
 import glob
@@ -99,6 +100,36 @@ class WaveLoader(Dataset):
 
         for filename in filenames:
             meta_data = np.load(os.path.join(base_folder, filename))
+            audio_data = meta_data['ir'][:seq_len]
+            wave_data = np.fft.rfft(audio_data)
+
+            position_rx = meta_data['position_rx']
+            position_tx = meta_data['position_tx']
+
+            self.update_min_max(audio_data, position_rx)
+
+            self.wave_chunks.append(wave_data)
+            self.positions_rx.append(position_rx)
+            self.positions_tx.append(position_tx)
+    
+    def load_real_env(self, base_folder, eval, seq_len, fs):
+        """ Load simulation datasets for AVR using predefined split
+        """
+        # split.pkl を読み込む
+        split_path = os.path.join(base_folder, "split.pkl")
+        with open(split_path, "rb") as f:
+            split = pickle.load(f)
+
+        # eval=True なら test、False なら train を使う
+        file_list = split["test"] if eval else split["train"]
+
+        for file_path in file_list:
+            # 絶対パスまたは相対パスを調整
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(base_folder, file_path)
+
+            # npzファイルの読み込み
+            meta_data = np.load(file_path)
             audio_data = meta_data['ir'][:seq_len]
             wave_data = np.fft.rfft(audio_data)
 
