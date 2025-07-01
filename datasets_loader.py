@@ -118,7 +118,7 @@ class WaveLoader(Dataset):
         """ Load simulation datasets for AVR using predefined split
         """
         # split.pkl を読み込む
-        split_path = os.path.join(base_folder, "split.pkl")
+        split_path = os.path.join(base_folder, "train_test_split.pkl")
         with open(split_path, "rb") as f:
             split = pickle.load(f)
 

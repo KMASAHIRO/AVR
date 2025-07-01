@@ -52,7 +52,7 @@ class AVR_Runner():
         # network and renderer
         self.fs = kwargs['render']['fs']
 
-        if self.dataset_type == 'MeshRIR' or self.dataset_type == 'Simu':
+        if self.dataset_type == 'MeshRIR' or self.dataset_type == 'Simu' or self.dataset_type == 'Real_env':
             audionerf = AVRModel(kwargs_network) # network
         elif self.dataset_type == 'RAF':
             audionerf = AVRModel_complex(kwargs_network) # network
@@ -78,7 +78,7 @@ class AVR_Runner():
         self.logger.info("Total number of parameters: %s", total_params)
 
         ## Train Settings
-        self.current_iteration = 1
+        self.current_iteration = 0
         if kwargs_train['load_ckpt']:
             self.load_checkpoints()
         self.batch_size = batchsize
@@ -218,6 +218,12 @@ class AVR_Runner():
                         valid_metrics = {'Angle': 0, 'Amplitude': 0, 'Envelope': 0, 'T60': 0, 'C50': 0, 'EDT': 0, 'multi_stft': 0}
                         valid_metrics_for_std = {'Angle': [], 'Amplitude': [], 'Envelope': [], 'T60': [], 'C50': [], 'EDT': [], 'multi_stft': []}
 
+                        # 評価結果保存用（for npz）
+                        ori_sig_list = []
+                        pred_sig_list = []
+                        position_rx_list = []
+                        position_tx_list = []
+
                         for check_idx, test_batch in enumerate(self.test_iter):
                             with torch.no_grad():
                                 if self.dataset_type == "RAF":
@@ -229,6 +235,12 @@ class AVR_Runner():
                                                                                 
                                 pred_sig = pred_sig[...,0] + 1j * pred_sig[...,1]
                                 ori_sig = (ori_sig.cuda()).to(pred_sig.dtype)
+
+                                # 蓄積（CPUに転送してnumpy化）
+                                ori_sig_list.append(ori_sig.detach().cpu().numpy())
+                                pred_sig_list.append(pred_sig.detach().cpu().numpy())
+                                position_rx_list.append(position_rx.detach().cpu().numpy())
+                                position_tx_list.append(position_tx.detach().cpu().numpy())
 
                                 losses, metrics, ori_time, pred_time = self.calculate_metrics(pred_sig, ori_sig, self.fs)
 
@@ -248,6 +260,21 @@ class AVR_Runner():
                                 save_dir = os.path.join(self.logdir, self.expname, f'img_test/energy_{str(self.current_iteration//1000).zfill(4)}_{str(check_idx).zfill(5)}.png')      
                                 log_inference_figure(ori_time.detach().cpu().numpy()[0,:], pred_time.detach().cpu().numpy()[0,:], metrics=metrics, save_dir=save_dir)
 
+                        npz_dir = os.path.join(self.logdir, self.expname, "val_result")
+                        os.makedirs(npz_dir, exist_ok=True)
+                        save_path = os.path.join(npz_dir, f"val_iter{self.current_iteration:06d}.npz")
+
+                        # 結合して保存
+                        np.savez_compressed(
+                            save_path,
+                            ori_sig=np.concatenate(ori_sig_list, axis=0),
+                            pred_sig=np.concatenate(pred_sig_list, axis=0),
+                            position_rx=np.concatenate(position_rx_list, axis=0),
+                            position_tx=np.concatenate(position_tx_list, axis=0),
+                            fs=self.fs
+                        )
+                        self.logger.info(f"Saved val npz to {save_path}")
+                        
                         num_batches = len(self.test_iter)
                         avg_losses = {key: valid_losses[key] / num_batches for key in valid_losses}
                         avg_metrics = {key: valid_metrics[key] / num_batches for key in valid_metrics}
