@@ -29,6 +29,7 @@ class WaveLoader(Dataset):
         self.positions_rx = []
         self.positions_tx = []
         self.rotations_tx = []
+        self.ch_idx_list = []
 
         self.wave_max = float('-inf')
         self.wave_min = float('inf')
@@ -144,6 +145,9 @@ class WaveLoader(Dataset):
             self.positions_rx.append(position_rx)
             self.positions_tx.append(position_tx)
 
+            if "ch_idx" in meta_data:
+                self.ch_idx_list.append(meta_data["ch_idx"].item())
+
     def load_raf(self, base_folder, eval, seq_len, fs):
         """ Load RAF datasets
         """
@@ -203,6 +207,7 @@ class WaveLoader(Dataset):
         wave_signal = self.wave_chunks[idx]
         position_rx = self.positions_rx[idx]
         position_tx = self.positions_tx[idx]
+        ch_idx = self.ch_idx_list[idx] if len(self.ch_idx_list) > 0 else None
         
         if not self.eval and self.dataset_type == 'RAF':
             position_rx = position_rx + torch.randn_like(position_rx) * 0.1
@@ -210,9 +215,9 @@ class WaveLoader(Dataset):
         
         if self.dataset_type == 'RAF':
             rotation_tx = self.rotations_tx[idx]
-            return wave_signal, position_rx, position_tx, rotation_tx
+            return wave_signal, position_rx, position_tx, rotation_tx, ch_idx
         else: 
-            return wave_signal, position_rx, position_tx
+            return wave_signal, position_rx, position_tx, ch_idx
 
 
 def quaternion_to_direction_vector(q):

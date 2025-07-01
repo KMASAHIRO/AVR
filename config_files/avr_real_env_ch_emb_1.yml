@@ -1,0 +1,93 @@
+# Using tiny cuda nn implementatino, heshgrid to do rendering
+
+### Path settings
+path:
+  expname: Real_env_1
+  dataset_type: Real_env
+  logdir: logs/real_env/
+
+
+### rendering settings
+render:
+  xyz_min: -10
+  xyz_max:  10
+  near: 0
+  far: 6
+  n_samples: 64
+  n_azi: 64
+  n_ele: 32
+  speed: 343.8
+  fs: 16000
+  pathloss: 1.5
+
+
+### training settings
+train:
+  lr: 5e-4
+  weight_decay: 0
+  T_max: 99600
+  eta_min: 5e-5
+  total_iterations: 99600
+  load_ckpt: False
+  save_freq: 16600
+  val_freq: 332
+
+  spec_loss_weight: 2
+  amplitude_loss_weight: 4
+  angle_loss_weight: 1
+  time_loss_weight: 50
+  energy_loss_weight: 1
+  multistft_loss_weight: 1
+
+
+### model settings  
+model: 
+  signal_output_dim: 1600
+  leaky_relu: 0.03
+
+  channel_embed:
+    is_embed: True
+    ch_num: 8
+    emb_dim: 128
+
+  pos_encoding_sigma:
+    base_resolution: 16
+    log2_hashmap_size: 18
+    n_features_per_level: 2
+    n_levels: 20
+    otype: HashGrid
+
+  dir_encoding_sig:
+    base_resolution: 16
+    log2_hashmap_size: 18
+    n_features_per_level: 2
+    n_levels: 20
+    otype: HashGrid
+  
+  tx_encoding_sig:
+    base_resolution: 16
+    log2_hashmap_size: 18
+    n_features_per_level: 2
+    n_levels: 20
+    otype: HashGrid
+
+  sigma_encoder_network:
+    activation: ReLU
+    n_hidden_layers: 3
+    n_neurons: 128
+    otype: FullyFusedMLP
+    output_activation: None
+
+  sigma_decoder_network:
+    activation: ReLU
+    n_hidden_layers: 3
+    n_neurons: 128
+    otype: FullyFusedMLP
+    output_activation: None
+
+  signal_network:
+    activation: ReLU
+    n_hidden_layers: 3
+    n_neurons: 512
+    otype: CutlassMLP
+    output_activation: None

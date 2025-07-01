@@ -163,11 +163,17 @@ class AVR_Runner():
             with tqdm(total=len(self.train_iter), desc=f"Iteration {self.current_iteration}/{self.total_iterations}") as pbar:
                 for train_batch in self.train_iter:
                     if self.dataset_type == "RAF":
-                        ori_sig, position_rx, position_tx, direction_tx = train_batch
-                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda())
+                        ori_sig, position_rx, position_tx, direction_tx, ch_idx = train_batch
+                        if ch_idx[0] is None:
+                            pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda())
+                        else:
+                            pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda(), ch_idx=ch_idx.cuda())
                     else:
-                        ori_sig, position_rx, position_tx = train_batch
-                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda())
+                        ori_sig, position_rx, position_tx, ch_idx = train_batch
+                        if ch_idx[0] is None:
+                            pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda())
+                        else:
+                            pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), ch_idx=ch_idx.cuda())
                     
                     pred_sig = pred_sig[...,0] + 1j * pred_sig[...,1]
                     ori_sig = (ori_sig.cuda()).to(pred_sig.dtype)
@@ -223,15 +229,22 @@ class AVR_Runner():
                         pred_sig_list = []
                         position_rx_list = []
                         position_tx_list = []
+                        ch_idx_list = []
 
                         for check_idx, test_batch in enumerate(self.test_iter):
                             with torch.no_grad():
                                 if self.dataset_type == "RAF":
-                                    ori_sig, position_rx, position_tx, direction_tx = test_batch
-                                    pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda())
+                                    ori_sig, position_rx, position_tx, direction_tx, ch_idx = test_batch
+                                    if ch_idx[0] is None:
+                                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda())
+                                    else:
+                                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda(), ch_idx=ch_idx.cuda())
                                 else:
-                                    ori_sig, position_rx, position_tx = test_batch
-                                    pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda())
+                                    ori_sig, position_rx, position_tx, ch_idx = test_batch
+                                    if ch_idx[0] is None:
+                                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda())
+                                    else:
+                                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), ch_idx=ch_idx.cuda())
                                                                                 
                                 pred_sig = pred_sig[...,0] + 1j * pred_sig[...,1]
                                 ori_sig = (ori_sig.cuda()).to(pred_sig.dtype)
@@ -241,6 +254,8 @@ class AVR_Runner():
                                 pred_sig_list.append(pred_sig.detach().cpu().numpy())
                                 position_rx_list.append(position_rx.detach().cpu().numpy())
                                 position_tx_list.append(position_tx.detach().cpu().numpy())
+                                if ch_idx[0] is not None:
+                                    ch_idx_list.append(ch_idx.detach().cpu().numpy())
 
                                 losses, metrics, ori_time, pred_time = self.calculate_metrics(pred_sig, ori_sig, self.fs)
 
@@ -265,14 +280,25 @@ class AVR_Runner():
                         save_path = os.path.join(npz_dir, f"val_iter{self.current_iteration:06d}.npz")
 
                         # 結合して保存
-                        np.savez_compressed(
-                            save_path,
-                            ori_sig=np.concatenate(ori_sig_list, axis=0),
-                            pred_sig=np.concatenate(pred_sig_list, axis=0),
-                            position_rx=np.concatenate(position_rx_list, axis=0),
-                            position_tx=np.concatenate(position_tx_list, axis=0),
-                            fs=self.fs
-                        )
+                        if len(ch_idx_list) == 0:
+                            np.savez_compressed(
+                                save_path,
+                                ori_sig=np.concatenate(ori_sig_list, axis=0),
+                                pred_sig=np.concatenate(pred_sig_list, axis=0),
+                                position_rx=np.concatenate(position_rx_list, axis=0),
+                                position_tx=np.concatenate(position_tx_list, axis=0),
+                                fs=self.fs
+                            )
+                        else:
+                            np.savez_compressed(
+                                save_path,
+                                ori_sig=np.concatenate(ori_sig_list, axis=0),
+                                pred_sig=np.concatenate(pred_sig_list, axis=0),
+                                position_rx=np.concatenate(position_rx_list, axis=0),
+                                position_tx=np.concatenate(position_tx_list, axis=0),
+                                dh_idx=np.concatenate(ch_idx_list, axis=0),
+                                fs=self.fs
+                            )
                         self.logger.info(f"Saved val npz to {save_path}")
                         
                         num_batches = len(self.test_iter)
@@ -296,11 +322,17 @@ class AVR_Runner():
                         for check_idx, train_iter_batch in enumerate(self.train_iter_show):
                             with torch.no_grad():
                                 if self.dataset_type == "RAF":
-                                    ori_sig, position_rx, position_tx, direction_tx = train_iter_batch
-                                    pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda())
+                                    ori_sig, position_rx, position_tx, direction_tx, ch_idx = train_iter_batch
+                                    if ch_idx[0] is None:
+                                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda())
+                                    else:
+                                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda(), ch_idx=ch_idx.cuda())
                                 else:
-                                    ori_sig, position_rx, position_tx = train_iter_batch
-                                    pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda())
+                                    ori_sig, position_rx, position_tx, ch_idx = train_iter_batch
+                                    if ch_idx[0] is None:
+                                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda())
+                                    else:
+                                        pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), ch_idx=ch_idx.cuda())
                                                                                 
                                 pred_sig = pred_sig[...,0] + 1j * pred_sig[...,1]
                                 ori_sig = (ori_sig.cuda()).to(pred_sig.dtype)

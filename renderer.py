@@ -28,7 +28,7 @@ class AVRRender(nn.Module):
         self.xyz_min = kwargs['xyz_min']
         self.xyz_max = kwargs['xyz_max']
 
-    def forward(self, rays_o, position_tx, direction_tx=None):
+    def forward(self, rays_o, position_tx, direction_tx=None, ch_idx=None):
         """Render audio signal for RAF dataset
 
         Parameters
@@ -39,8 +39,8 @@ class AVRRender(nn.Module):
             position of the speaker
         direction_tx : [bs, 3]
             speaker orientation
-        mic_dir : [bs, 1]
-            microphone orientation for spatial audio rendering
+        ch_idx : [bs], optional
+            integer channel index per sample (for channel embedding)
 
         Returns
         -------
@@ -66,9 +66,9 @@ class AVRRender(nn.Module):
 
         # get network output
         if direction_tx is not None:
-            attn, signal = self.network_fn(network_pts, network_view, network_tx, network_dir_tx)
+            attn, signal = self.network_fn(network_pts, network_view, network_tx, network_dir_tx, ch_idx=ch_idx)
         else:
-            attn, signal = self.network_fn(network_pts, network_view, network_tx)
+            attn, signal = self.network_fn(network_pts, network_view, network_tx, ch_idx=ch_idx)
         attn = attn.view(bs, -1, self.n_samples) # [bs, N_rays, N_samples]
         signal = signal.view(bs, -1, self.n_samples, signal.size(-1)) # [bs, N_rays, N_samples, N_lenseq]
 
