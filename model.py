@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import tinycudann as tcnn
 import numpy as np
+import math
 
 class AVRModel(nn.Module):
     def __init__(self, cfg):
@@ -24,9 +25,10 @@ class AVRModel(nn.Module):
         self._dir_encoding = tcnn.Encoding(3, dir_encoding_sig, dtype=torch.float32)
         self._tx_encoding = tcnn.Encoding(3, tx_encoding_sig, dtype=torch.float32)
 
-        if cfg["channel_embed"]["is_embed"]:
-            self.ch_num = cfg["channel_embed"]["ch_num"]
-            self.channel_emb_dim = cfg["channel_embed"].get("emb_dim", 128)
+        channel_cfg = cfg.get("channel_embed")
+        if channel_cfg is not None and channel_cfg.get("is_embed", False):
+            self.ch_num = channel_cfg["ch_num"]
+            self.channel_emb_dim = channel_cfg.get("emb_dim", 128)
             self.channel_embedding = nn.Parameter(
                 torch.randn(self.ch_num, self.channel_emb_dim) / math.sqrt(self.channel_emb_dim),
                 requires_grad=True

@@ -2,9 +2,9 @@
 
 ### Path settings
 path:
-  expname: Real_env_1
+  expname: Real_env_ch_emb_1
   dataset_type: Real_env
-  logdir: logs/real_env/
+  logdir: logs/real_env_ch_emb/
 
 
 ### rendering settings
