@@ -207,7 +207,7 @@ class WaveLoader(Dataset):
         wave_signal = self.wave_chunks[idx]
         position_rx = self.positions_rx[idx]
         position_tx = self.positions_tx[idx]
-        ch_idx = self.ch_idx_list[idx] if len(self.ch_idx_list) > 0 else None
+        ch_idx = self.ch_idx_list[idx] if len(self.ch_idx_list) > 0 else -1
         
         if not self.eval and self.dataset_type == 'RAF':
             position_rx = position_rx + torch.randn_like(position_rx) * 0.1

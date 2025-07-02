@@ -164,13 +164,13 @@ class AVR_Runner():
                 for train_batch in self.train_iter:
                     if self.dataset_type == "RAF":
                         ori_sig, position_rx, position_tx, direction_tx, ch_idx = train_batch
-                        if ch_idx[0] is None:
+                        if ch_idx[0] == -1:
                             pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda())
                         else:
                             pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda(), ch_idx=ch_idx.cuda())
                     else:
                         ori_sig, position_rx, position_tx, ch_idx = train_batch
-                        if ch_idx[0] is None:
+                        if ch_idx[0] == -1:
                             pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda())
                         else:
                             pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), ch_idx=ch_idx.cuda())
@@ -235,13 +235,13 @@ class AVR_Runner():
                             with torch.no_grad():
                                 if self.dataset_type == "RAF":
                                     ori_sig, position_rx, position_tx, direction_tx, ch_idx = test_batch
-                                    if ch_idx[0] is None:
+                                    if ch_idx[0] == -1:
                                         pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda())
                                     else:
                                         pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda(), ch_idx=ch_idx.cuda())
                                 else:
                                     ori_sig, position_rx, position_tx, ch_idx = test_batch
-                                    if ch_idx[0] is None:
+                                    if ch_idx[0] == -1:
                                         pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda())
                                     else:
                                         pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), ch_idx=ch_idx.cuda())
@@ -323,13 +323,13 @@ class AVR_Runner():
                             with torch.no_grad():
                                 if self.dataset_type == "RAF":
                                     ori_sig, position_rx, position_tx, direction_tx, ch_idx = train_iter_batch
-                                    if ch_idx[0] is None:
+                                    if ch_idx[0] == -1:
                                         pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda())
                                     else:
                                         pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), direction_tx.cuda(), ch_idx=ch_idx.cuda())
                                 else:
                                     ori_sig, position_rx, position_tx, ch_idx = train_iter_batch
-                                    if ch_idx[0] is None:
+                                    if ch_idx[0] == -1:
                                         pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda())
                                     else:
                                         pred_sig = self.renderer(position_rx.cuda(), position_tx.cuda(), ch_idx=ch_idx.cuda())
