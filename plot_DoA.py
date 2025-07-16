@@ -1,27 +1,14 @@
+import os
+import re
+import matplotlib.pyplot as plt
+import pickle
 import numpy as np
 import torch
 import math
-import os
-import pickle
 import pyroomacoustics as pra
-import logging
-
 
 def angular_error_deg(est_deg, ref_deg):
     return min(abs(est_deg - ref_deg), 360 - abs(est_deg - ref_deg))
-
-
-def setup_logger(log_path):
-    """ログ設定（ファイルにのみ出力）"""
-    logger = logging.getLogger("DoALogger")
-    logger.setLevel(logging.INFO)
-    logger.handlers = []  # 重複出力を防ぐためリセット
-
-    file_handler = logging.FileHandler(log_path)
-    file_handler.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(file_handler)
-
-    return logger
 
 
 def run_doa_on_npz(
@@ -35,11 +22,6 @@ def run_doa_on_npz(
     if algo_names is None:
         algo_names = ['MUSIC', 'NormMUSIC', 'SRP', 'CSSM', 'WAVES', 'TOPS', 'FRIDA']
 
-    # ログファイルのパスを自動設定
-    log_path = save_path.replace(".pkl", ".log") if save_path else "doa_log_output.log"
-    logger = setup_logger(log_path)
-
-    logger.info(f"Loading: {npz_path}")
     data = np.load(npz_path)
 
     pred_sig = data['pred_sig']        # (N, T), complex64
@@ -50,8 +32,6 @@ def run_doa_on_npz(
     N = pred_sig.shape[0]
     M = 8  # マイク数
     G = N // M  # グループ数
-
-    logger.info(f"Total samples: {N}, divided into {G} groups of {M} microphones.")
 
     doa_results = {algo: {
         "true_deg": [],
@@ -125,37 +105,95 @@ def run_doa_on_npz(
                 doa_results[algo]["gt_vs_true_error"].append(err_gt_vs_true)
 
             except Exception as e:
-                logger.info(f"[{algo}] Group {g} failed: {e}")
                 for key in doa_results[algo]:
                     doa_results[algo][key].append(None)
-
-    # === ログ出力 ===
-    logger.info("\n=== DoA Estimation Summary ===")
-    for algo in algo_names:
-        logger.info(f"\n[Algorithm: {algo}]")
-        for key in ["pred_vs_gt_error", "pred_vs_true_error", "gt_vs_true_error"]:
-            values = [v for v in doa_results[algo][key] if v is not None]
-            if values:
-                mean = np.mean(values)
-                std = np.std(values)
-                logger.info(f"{key:22s} → Mean: {mean:.2f}°, Std: {std:.2f}°")
-            else:
-                logger.info(f"{key:22s} → No valid results")
 
     # 結果保存
     if save_path:
         with open(save_path, "wb") as f:
             pickle.dump(doa_results, f)
-        logger.info(f"\nSaved DoA results to: {save_path}")
 
+def plot_doa_error_over_iterations(
+    val_result_dir: str,
+    save_dir: str,
+    algo_name: str = "NormMUSIC",
+    error_key: str = "pred_vs_gt_error",
+    output_path: str = "doa_error_plot.png",
+    run_doa_func=None
+):
+    """
+    val_iter*.npz を順次処理し、DoA誤差を描画・保存。
+
+    Parameters:
+        val_result_dir (str): val_iter*.npz を含む入力ディレクトリ
+        save_dir (str): 処理結果（.pkl）の保存先ディレクトリ
+        algo_name (str): 処理対象アルゴリズム名（例: 'NormMUSIC'）
+        error_key (str): プロットする誤差キー（例: 'pred_vs_gt_error'）
+        output_path (str): PNG保存先のパス
+        run_doa_func (callable): run_doa_on_npz 互換の処理関数
+    """
+    assert run_doa_func is not None, "run_doa_func must be provided"
+    os.makedirs(save_dir, exist_ok=True)
+
+    npz_files = sorted([
+        f for f in os.listdir(val_result_dir)
+        if re.match(r"val_iter\d+\.npz", f)
+    ], key=lambda x: int(re.findall(r"\d+", x)[0]))
+
+    iters = []
+    mean_errors = []
+
+    for npz_file in npz_files:
+        iter_num = int(re.findall(r"\d+", npz_file)[0])
+        npz_path = os.path.join(val_result_dir, npz_file)
+        pkl_filename = os.path.splitext(npz_file)[0] + ".pkl"
+        pkl_path = os.path.join(save_dir, pkl_filename)
+
+        if not os.path.exists(pkl_path):
+            run_doa_func(
+                npz_path=npz_path,
+                fs=16000,
+                n_fft=512,
+                mic_radius=0.0365,
+                algo_names=[algo_name],
+                save_path=pkl_path
+            )
+
+        # 読み込み・平均誤差算出
+        with open(pkl_path, "rb") as f:
+            doa_results = pickle.load(f)
+
+        errors = [
+            e for e in doa_results[algo_name][error_key]
+            if e is not None
+        ]
+        if errors:
+            iters.append(iter_num)
+            mean_errors.append(sum(errors) / len(errors))
+
+    # === ステップをエポックに変換 ===
+    first_iter = min(iters)
+    epochs = [iter / first_iter for iter in iters]
+
+    # グラフ描画
+    plt.figure(figsize=(10, 5))
+    plt.plot(epochs, mean_errors, label=f'{algo_name}: {error_key}')
+    plt.xlabel("Epoch")
+    plt.ylabel("Mean Angular Error (°)")
+    plt.title(f"{algo_name} {error_key.replace('_', ' ').title()} Over Epochs")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
 
 if __name__ == "__main__":
-    run_doa_on_npz(
-        npz_path="/home/ach17616qc/logs/pra/Pra_param_1_1/val_result/val_iter099600.npz",
-        fs=16000,
-        n_fft=512,
-        mic_radius=0.0365,
-        algo_names=['MUSIC', 'NormMUSIC', 'SRP', 'CSSM', 'WAVES', 'TOPS', 'FRIDA'],
-        save_path="/home/ach17616qc/logs/pra/Pra_param_1_1/doa_val_iter099600.pkl"
+    plot_doa_error_over_iterations(
+        val_result_dir="/home/ach17616qc/logs/real_exp/Real_exp_param_1_1/val_result",
+        save_dir="/home/ach17616qc/logs/real_exp/Real_exp_param_1_1/doa_results",
+        algo_name="NormMUSIC",
+        error_key="pred_vs_gt_error",
+        output_path="/home/ach17616qc/logs/real_exp/Real_exp_param_1_1/normmusic_pred_vs_gt_error.png",
+        run_doa_func=run_doa_on_npz
     )
 

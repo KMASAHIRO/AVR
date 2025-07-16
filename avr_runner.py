@@ -296,7 +296,7 @@ class AVR_Runner():
                                 pred_sig=np.concatenate(pred_sig_list, axis=0),
                                 position_rx=np.concatenate(position_rx_list, axis=0),
                                 position_tx=np.concatenate(position_tx_list, axis=0),
-                                dh_idx=np.concatenate(ch_idx_list, axis=0),
+                                ch_idx=np.concatenate(ch_idx_list, axis=0),
                                 fs=self.fs
                             )
                         self.logger.info(f"Saved val npz to {save_path}")
