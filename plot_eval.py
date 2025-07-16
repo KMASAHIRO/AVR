@@ -233,11 +233,11 @@ def plot_loss_and_doa_over_epochs(
 
 if __name__ == "__main__":
     plot_loss_and_doa_over_epochs(
-        log_path="/home/ach17616qc/tensorboard_logs/real_exp/Real_exp_param_1_1/0707-153722/events.out.tfevents.1751870242.hnode044.291534.0",
-        doa_npz_dir="/home/ach17616qc/logs/real_exp/Real_exp_param_1_1/val_result",
-        doa_save_dir="/home/ach17616qc/logs/real_exp/Real_exp_param_1_1/doa_results",
+        log_path="/home/ach17616qc/tensorboard_logs/pra/Pra_param_1_1/0707-153432/events.out.tfevents.1751870073.hnode002.198220.0",
+        doa_npz_dir="/home/ach17616qc/logs/pra/Pra_param_1_1/val_result",
+        doa_save_dir="/home/ach17616qc/logs/pra/Pra_param_1_1/doa_results",
         algo_name="NormMUSIC",
         error_key="pred_vs_gt_error",
-        output_path="/home/ach17616qc/logs/real_exp/Real_exp_param_1_1/loss_and_doa_plot.png",
+        output_path="/home/ach17616qc/logs/pra/Pra_param_1_1/loss_and_doa_plot.png",
         run_doa_func=run_doa_on_npz
     )
