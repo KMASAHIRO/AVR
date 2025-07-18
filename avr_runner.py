@@ -419,7 +419,6 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='train')
     parser.add_argument('--config', type=str, default='avr.yml', help='config file path')
     parser.add_argument('--dataset_dir', type=str, default='S1-M3969_npy')
-    parser.add_argument('--batch_size', type=int, default=4)
     args = parser.parse_args()
 
 
@@ -429,6 +428,9 @@ if __name__ == '__main__':
     elif args.mode =='test': # specify the dict of the config yaml
         with open(os.path.join(args.config, 'avr_conf.yml'), 'r') as file:
             kwargs = yaml.load(file, Loader=yaml.FullLoader)
+    
+    # batch_sizeがconfigに存在しなければ、デフォルトとして4を使用
+    batch_size = kwargs.get("train", {}).get("batch_size", 4)
 
     ## backup config file
     logdir = os.path.join(kwargs['path']['logdir'], kwargs['path']['expname'])
@@ -458,5 +460,5 @@ if __name__ == '__main__':
         print("Source and destination are the same, skipping copy.")
 
 
-    worker = AVR_Runner(mode=args.mode, dataset_dir=args.dataset_dir, batchsize=args.batch_size, **kwargs)
+    worker = AVR_Runner(mode=args.mode, dataset_dir=args.dataset_dir, batchsize=batch_size, **kwargs)
     worker.train()
