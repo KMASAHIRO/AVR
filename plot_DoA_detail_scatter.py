@@ -84,7 +84,7 @@ def plot_doa_comparison(yaml_path: str):
         draw_subplot(axs[i, 2], true, gt, "true_deg", "gt_deg",
                      f"{label} (Epoch {epoch})\ngt_vs_true_error: {err_gt:.2f}°")
 
-    fig.suptitle("DoA Results (NormMUSIC)", fontsize=22)
+    fig.suptitle("DoA Results (NormMUSIC, AVR)", fontsize=22)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.savefig(save_path)
     plt.close()
