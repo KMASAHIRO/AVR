@@ -24,7 +24,7 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
         time_loss_weight = trial.suggest_float('time_loss_weight', 1, 100)
         energy_loss_weight = trial.suggest_float('energy_loss_weight', 1, 100)
         multistft_loss_weight = trial.suggest_float('multistft_loss_weight', 1, 100)
-        sigma_enc_neurons = 2 ** trial.suggest_int('sigma_encoder_network_n_neurons' 5, 9)
+        sigma_enc_neurons = 2 ** trial.suggest_int('sigma_encoder_network_n_neurons', 5, 9)
         sigma_dec_neurons = 2 ** trial.suggest_int('sigma_decoder_network_n_neurons', 5, 9)
         signal_neurons = 2 ** trial.suggest_int('signal_network_n_neurons', 7, 11)
         emb_dim = 2 ** trial.suggest_int('emb_dim', 5, 8)
