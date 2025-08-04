@@ -84,7 +84,7 @@ def run_training_and_doa(config, dataset_dir):
     logdir = os.path.join(config['path']['logdir'], config['path']['expname'])
     os.makedirs(logdir, exist_ok=True)
 
-    runner = AVR_Runner(dataset_dir=dataset_dir, batchsize=batch_size, **config)
+    runner = AVR_Runner(mode='train', dataset_dir=dataset_dir, batchsize=batch_size, **config)
     runner.train()
 
     npz_dir = os.path.join(logdir, "val_result")
