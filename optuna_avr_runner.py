@@ -84,6 +84,11 @@ def run_training_and_doa(config, dataset_dir):
     logdir = os.path.join(config['path']['logdir'], config['path']['expname'])
     os.makedirs(logdir, exist_ok=True)
 
+    img_train_dir = os.path.join(logdir, 'img_train')
+    os.makedirs(img_train_dir, exist_ok=True)
+    img_test_dir = os.path.join(logdir, 'img_test')
+    os.makedirs(img_test_dir, exist_ok=True)
+
     runner = AVR_Runner(mode='train', dataset_dir=dataset_dir, batchsize=batch_size, **config)
     runner.train()
 
