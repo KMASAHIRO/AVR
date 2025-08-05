@@ -93,7 +93,13 @@ class AVRModel(nn.Module):
             )
             self.encoder_mode = "injection"
         else:
-            in_dims = self._pos_encoding.n_output_dims + (self.emb_dim if channel_cfg else 0)
+            if channel_cfg and channel_cfg.get("is_embed", False):
+                self.encoder_channel_embedding = nn.Parameter(
+                    torch.randn(self.ch_num, self.emb_dim) / math.sqrt(self.emb_dim),
+                    requires_grad=True
+                )
+            
+            in_dims = self._pos_encoding.n_output_dims + self.emb_dim
             self._model_encoder_sigma = tcnn.Network(
                 n_input_dims=in_dims,
                 n_output_dims=128,
@@ -122,8 +128,13 @@ class AVRModel(nn.Module):
             )
             self.signal_mode = "injection"
         else:
-            in_dims = 128 + self._dir_encoding.n_output_dims + self._tx_encoding.n_output_dims + \
-                      (self.emb_dim if channel_cfg else 0)
+            if channel_cfg and channel_cfg.get("is_embed", False):
+                self.signal_channel_embedding = nn.Parameter(
+                    torch.randn(self.ch_num, self.emb_dim) / math.sqrt(self.emb_dim),
+                    requires_grad=True
+                )
+            
+            in_dims = 128 + self._dir_encoding.n_output_dims + self._tx_encoding.n_output_dims + self.emb_dim
             self._model_signal = tcnn.Network(
                 n_input_dims=in_dims,
                 n_output_dims=self.signal_output_dim,
@@ -152,8 +163,8 @@ class AVRModel(nn.Module):
             sigma_feat = self._model_encoder_sigma(pos_enc, ch_idx_expanded)
         else:
             if ch_idx_expanded is not None:
-                ch_emb = self.channel_embedding[ch_idx_expanded]
-                sigma_input = torch.cat([pos_enc, ch_emb], dim=-1)
+                ch_emb_enc = self.encoder_channel_embedding[ch_idx_expanded]
+                sigma_input = torch.cat([pos_enc, ch_emb_enc], dim=-1)
             else:
                 sigma_input = pos_enc
             sigma_feat = self._model_encoder_sigma(sigma_input)
@@ -170,8 +181,8 @@ class AVRModel(nn.Module):
         else:
             inputs = [sigma_feat, dir_enc, tx_enc]
             if ch_idx_expanded is not None:
-                ch_emb = self.channel_embedding[ch_idx_expanded]
-                inputs.append(ch_emb)
+                ch_emb_sig = self.signal_channel_embedding[ch_idx_expanded]
+                inputs.append(ch_emb_sig)
             signal_input = torch.cat(inputs, dim=-1)
             signal_output = self._model_signal(signal_input)
 
