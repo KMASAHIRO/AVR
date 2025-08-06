@@ -37,6 +37,8 @@ class Criterion(nn.Module):
         sig: 複素数 (M, T)
         """
         M = sig.shape[0]
+        # 本来はconfig記載のchannel数と等しいか確認したいが、暫定処理
+        assert M == 8, f"Expected 8 microphones, but got {M}"
         time_sig = torch.real(torch.fft.irfft(sig, dim=-1))
         n_fft = 512
 
