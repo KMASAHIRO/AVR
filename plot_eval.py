@@ -116,6 +116,140 @@ def run_doa_on_npz(
         with open(save_path, "wb") as f:
             pickle.dump(doa_results, f)
 
+def run_delay_and_sum_on_npz(
+    npz_path,
+    fs=16000,
+    mic_radius=0.0365,
+    n_fft=512,
+    angle_resolution=1.0,
+    beta=100.0,
+    save_path=None
+):
+    # === Load Data ===
+    data = np.load(npz_path)
+    pred_sig = data['pred_sig']        # (N, T), complex64
+    ori_sig = data['ori_sig']          # (N, T), complex64
+    position_rx = data['position_rx']  # (N, 3)
+    position_tx = data['position_tx']  # (N, 3)
+
+    N = pred_sig.shape[0]
+    M = 8
+    G = N // M
+
+    doa_results = {
+        "NormDAS_soft-argmax": {
+            "true_deg": [], "pred_deg": [], "gt_deg": [],
+            "pred_vs_gt_error": [], "pred_vs_true_error": [], "gt_vs_true_error": []
+        },
+        "NormDAS_argmax": {
+            "true_deg": [], "pred_deg": [], "gt_deg": [],
+            "pred_vs_gt_error": [], "pred_vs_true_error": [], "gt_vs_true_error": []
+        }
+    }
+
+    # === Angle grid ===
+    angles = torch.arange(0.0, 360.0, step=angle_resolution)
+    angles_rad = torch.deg2rad(angles)
+
+    sound_speed = 343.8  # m/s
+
+    for g in range(G):
+        idxs = np.arange(g * M, (g + 1) * M)
+        pred_group = pred_sig[idxs]
+        ori_group = ori_sig[idxs]
+        rx_pos = position_rx[idxs]
+        tx_pos = position_tx[idxs][0]
+
+        # XY平面でのマイク位置
+        mic_pos = rx_pos[:, :2]
+        mic_center = np.mean(mic_pos, axis=0)
+        mic_pos_centered = mic_pos - mic_center
+        mic_pos_tensor = torch.tensor(mic_pos_centered, dtype=torch.float32)  # (M, 2)
+
+        # True DoA角度 (0~360)
+        dx, dy = tx_pos[0] - mic_center[0], tx_pos[1] - mic_center[1]
+        true_rad = math.atan2(dy, dx)
+        true_deg = np.degrees(true_rad) % 360
+
+        # === Predicted signal (PyTorch Tensor) ===
+        pred_sig_t = torch.tensor(pred_group, dtype=torch.cfloat)
+        time_pred = torch.fft.irfft(pred_sig_t, dim=-1).real  # (M, T)
+
+        # === Ground Truth signal ===
+        gt_sig_t = torch.tensor(ori_group, dtype=torch.cfloat)
+        time_gt = torch.fft.irfft(gt_sig_t, dim=-1).real
+
+        # === Frequency domain transform ===
+        X_pred = torch.fft.rfft(time_pred, n=n_fft, dim=-1)  # (M, F)
+        X_gt = torch.fft.rfft(time_gt, n=n_fft, dim=-1)
+        freqs = torch.fft.rfftfreq(n_fft, 1/fs)  # (F,)
+
+        K = len(angles)
+        M_, F = X_pred.shape
+
+        # === Steering vector ===
+        steering = torch.zeros(K, M_, F, dtype=torch.cfloat)
+        for i, theta in enumerate(angles_rad):
+            u = torch.tensor([torch.cos(theta), torch.sin(theta)])
+            delays = (mic_pos_tensor @ u) / sound_speed  # (M,)
+            phase_shift = torch.exp(-1j * 2 * np.pi * delays[:, None] * freqs[None, :])  # (M, F)
+            steering[i] = phase_shift
+
+        # === Delay-and-Sum beamforming ===
+        beam_pred = torch.einsum('mf,kmf->kf', X_pred, steering) / M  # (K, F)
+        beam_gt = torch.einsum('mf,kmf->kf', X_gt, steering) / M
+        
+        # パワーを計算
+        beam_power_pred = torch.abs(beam_pred) ** 2  # (K, F)
+        beam_power_gt = torch.abs(beam_gt) ** 2  # (K, F)
+        
+        # 周波数ごとに正規化
+        beam_power_pred_norm = beam_power_pred / (torch.sum(beam_power_pred, dim=0, keepdim=True) + 1e-8)
+        power_pred = torch.sum(beam_power_pred_norm, dim=-1)  # (K,)
+
+        beam_power_gt_norm = beam_power_gt / (torch.sum(beam_power_gt, dim=0, keepdim=True) + 1e-8)
+        power_gt = torch.sum(beam_power_gt_norm, dim=-1)  # (K,)
+
+        # === Soft-argmax ===
+        weights_pred = torch.softmax(beta * power_pred, dim=0)
+        weights_gt = torch.softmax(beta * power_gt, dim=0)
+        pred_deg_soft = torch.sum(weights_pred * angles).item() % 360
+        gt_deg_soft = torch.sum(weights_gt * angles).item() % 360
+
+        # === Argmax ===
+        pred_idx = torch.argmax(power_pred).item()
+        gt_idx = torch.argmax(power_gt).item()
+        pred_deg_argmax = angles[pred_idx].item() % 360
+        gt_deg_argmax = angles[gt_idx].item() % 360
+
+        # === Error calculation using existing angular_error_deg ===
+        err_pred_vs_gt_soft = angular_error_deg(pred_deg_soft, gt_deg_soft)
+        err_pred_vs_true_soft = angular_error_deg(pred_deg_soft, true_deg)
+        err_gt_vs_true_soft = angular_error_deg(gt_deg_soft, true_deg)
+
+        err_pred_vs_gt_argmax = angular_error_deg(pred_deg_argmax, gt_deg_argmax)
+        err_pred_vs_true_argmax = angular_error_deg(pred_deg_argmax, true_deg)
+        err_gt_vs_true_argmax = angular_error_deg(gt_deg_argmax, true_deg)
+
+        # === Save results ===
+        for method, pred_deg, gt_deg, err_pg, err_pt, err_gt in [
+            ("NormDAS_soft-argmax", pred_deg_soft, gt_deg_soft, err_pred_vs_gt_soft, err_pred_vs_true_soft, err_gt_vs_true_soft),
+            ("NormDAS_argmax", pred_deg_argmax, gt_deg_argmax, err_pred_vs_gt_argmax, err_pred_vs_true_argmax, err_gt_vs_true_argmax)
+        ]:
+            doa_results[method]["true_deg"].append(true_deg)
+            doa_results[method]["pred_deg"].append(pred_deg)
+            doa_results[method]["gt_deg"].append(gt_deg)
+            doa_results[method]["pred_vs_gt_error"].append(err_pg)
+            doa_results[method]["pred_vs_true_error"].append(err_pt)
+            doa_results[method]["gt_vs_true_error"].append(err_gt)
+
+    # === Save to pickle if requested ===
+    if save_path:
+        with open(save_path, "wb") as f:
+            pickle.dump(doa_results, f)
+
+    return doa_results
+
 def plot_loss_and_doa_over_epochs(
     log_path: str,
     doa_npz_dir: str,
@@ -124,6 +258,8 @@ def plot_loss_and_doa_over_epochs(
     error_key: str = "pred_vs_gt_error",
     output_path: str = "loss_and_doa_plot.png",
     run_doa_func=None,
+    run_beamform_func=None,
+    beamform_save_dir=None,
     fs: int = 16000,
     n_fft: int = 512,
     mic_radius: float = 0.0365,
@@ -139,10 +275,15 @@ def plot_loss_and_doa_over_epochs(
         error_key (str): DoA誤差のキー（例: "pred_vs_gt_error"）
         output_path (str): 出力グラフファイル名
         run_doa_func (callable): run_doa_on_npz に準拠した関数
+        run_beamform_func (callable): run_delay_and_sum_on_npz に準拠した関数
+        beamform_save_dir (str): Beamformingの結果保存先
         fs, n_fft, mic_radius: DoA推定のパラメータ
     """
     assert run_doa_func is not None, "run_doa_func must be provided"
     os.makedirs(doa_save_dir, exist_ok=True)
+
+    if beamform_save_dir is not None:
+        os.makedirs(beamform_save_dir, exist_ok=True)
 
     # === Lossの読み取り ===
     ea = event_accumulator.EventAccumulator(log_path)
@@ -177,6 +318,11 @@ def plot_loss_and_doa_over_epochs(
     doa_epochs = []
     doa_errors = []
 
+    das_soft_epochs = []
+    das_soft_errors = []
+    das_argmax_epochs = []
+    das_argmax_errors = []
+
     for npz_file in npz_files:
         iter_num = int(re.findall(r"\d+", npz_file)[0])
         epoch = iter_num / first_step
@@ -202,6 +348,40 @@ def plot_loss_and_doa_over_epochs(
             mean_error = sum(errors) / len(errors)
             doa_epochs.append(epoch)
             doa_errors.append(mean_error)
+        
+        # === Beamforming ===
+        if run_beamform_func is not None:
+            if beamform_save_dir is not None:
+                pkl_beam = os.path.join(beamform_save_dir, npz_file.replace(".npz", ".pkl"))
+            else:
+                pkl_beam = None
+                
+            if not os.path.exists(pkl_beam):
+                beamform_results = run_beamform_func(
+                    npz_path=npz_path,
+                    fs=fs,
+                    n_fft=n_fft,
+                    mic_radius=mic_radius,
+                    save_path=pkl_beam
+                )
+            else:
+                with open(pkl_beam, "rb") as f:
+                    beamform_results = pickle.load(f)
+            
+            # soft-argmax
+            errors_soft = beamform_results["NormDAS_soft-argmax"][error_key]
+            if errors_soft:
+                mean_soft_error = sum(errors_soft) / len(errors_soft)
+                das_soft_epochs.append(epoch)
+                das_soft_errors.append(mean_soft_error)
+
+            # argmax
+            errors_argmax = beamform_results["NormDAS_argmax"][error_key]
+            if errors_argmax:
+                mean_argmax_error = sum(errors_argmax) / len(errors_argmax)
+                das_argmax_epochs.append(epoch)
+                das_argmax_errors.append(mean_argmax_error)
+
 
     # === 描画 ===
     fig, ax1 = plt.subplots(figsize=(10, 5))
@@ -218,6 +398,12 @@ def plot_loss_and_doa_over_epochs(
     ax2 = ax1.twinx()
     ax2.set_ylabel("DoA Error (°)")
     ax2.plot(doa_epochs, doa_errors, label="DoA Error", color="green")
+    
+    if das_soft_epochs:
+        ax2.plot(das_soft_epochs, das_soft_errors, label="DAS Error (soft)", color="red")
+    if das_argmax_epochs:
+        ax2.plot(das_argmax_epochs, das_argmax_errors, label="DAS Error (argmax)", color="purple")
+
     ax2.set_ylim(0, 120)
     ax2.tick_params(axis='y')
 
@@ -233,11 +419,13 @@ def plot_loss_and_doa_over_epochs(
 
 if __name__ == "__main__":
     plot_loss_and_doa_over_epochs(
-        log_path="/home/ach17616qc/tensorboard_logs/pra/Pra_param_1_1/0707-153432/events.out.tfevents.1751870073.hnode002.198220.0",
-        doa_npz_dir="/home/ach17616qc/logs/pra/Pra_param_1_1/val_result",
-        doa_save_dir="/home/ach17616qc/logs/pra/Pra_param_1_1/doa_results",
+        log_path="/home/ach17616qc/tensorboard_logs/real_exp/Real_exp_param_4_1/0714-143753/events.out.tfevents.1752471473.hnode007.3594282.0",
+        doa_npz_dir="/home/ach17616qc/logs/real_exp/Real_exp_param_4_1/val_result",
+        doa_save_dir="/home/ach17616qc/logs/real_exp/Real_exp_param_4_1/doa_results",
         algo_name="NormMUSIC",
         error_key="pred_vs_gt_error",
-        output_path="/home/ach17616qc/logs/pra/Pra_param_1_1/loss_and_doa_plot.png",
-        run_doa_func=run_doa_on_npz
+        output_path="/home/ach17616qc/logs/real_exp/Real_exp_param_4_1/loss_and_doa_and_beamform_plot.png",
+        run_doa_func=run_doa_on_npz,
+        run_beamform_func=run_delay_and_sum_on_npz,
+        beamform_save_dir="/home/ach17616qc/logs/real_exp/Real_exp_param_4_1/beamform_results",
     )

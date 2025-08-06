@@ -15,7 +15,7 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
 
     # === ハイパラ探索範囲 ===
     if trial:
-        batch_size = 2 ** trial.suggest_int('batch_size', 0, 4)
+        batch_size = 2 ** trial.suggest_int('batch_size', 0, 3)
         n_samples = trial.suggest_int('n_samples', 40, 80)
         n_azi = trial.suggest_int('n_azi', 48, 80)
         weight_decay = trial.suggest_float('weight_decay', 0, 1e-3)
