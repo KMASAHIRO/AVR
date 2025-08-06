@@ -309,6 +309,34 @@ def plot_loss_and_doa_over_epochs(
     train_epochs = [s / first_step for s in train_steps]
     test_epochs = [s / first_step for s in test_steps]
 
+    def get_scalar(tag):
+        if tag in ea.Tags()['scalars']:
+            values = [ev.value for ev in ea.Scalars(tag)]
+            steps = [ev.step for ev in ea.Scalars(tag)]
+            return steps, values
+        return None, None
+
+    das_tags = {
+        "train_reg": "train_loss/das_reg_loss",
+        "train_ce": "train_loss/das_ce_loss",
+        "test_reg": "test_loss/das_reg_loss",
+        "test_ce": "test_loss/das_ce_loss"
+    }
+
+    das_data = {}
+    nonzero_flags = []
+
+    for key, tag in das_tags.items():
+        steps, values = get_scalar(tag)
+        if steps is not None and any(v != 0 for v in values):
+            epochs = [s / first_step for s in steps]
+            das_data[key] = (epochs, values)
+            nonzero_flags.append(True)
+        else:
+            nonzero_flags.append(False)
+
+    das_all_nonzero = all(nonzero_flags)
+
     # === DoA処理 ===
     npz_files = sorted([
         f for f in os.listdir(doa_npz_dir)
@@ -390,7 +418,22 @@ def plot_loss_and_doa_over_epochs(
     ax1.set_xlabel("Epoch")
     ax1.set_ylabel("Loss", color="black")
     ax1.plot(train_epochs, train_values, label="Train Loss", color="blue")
-    ax1.plot(test_epochs, test_values, label="Test Loss", color="orange")
+    ax1.plot(test_epochs, test_values, label="Val Loss", color="orange")
+
+    if das_all_nonzero:
+        if "train_reg" in das_data:
+            ax1.plot(das_data["train_reg"][0], das_data["train_reg"][1],
+                     label="Train DAS Reg Loss", color="cyan")
+        if "train_ce" in das_data:
+            ax1.plot(das_data["train_ce"][0], das_data["train_ce"][1],
+                     label="Train DAS CE Loss", color="magenta")
+        if "test_reg" in das_data:
+            ax1.plot(das_data["test_reg"][0], das_data["test_reg"][1],
+                     label="Val DAS Reg Loss", color="deepskyblue")
+        if "test_ce" in das_data:
+            ax1.plot(das_data["test_ce"][0], das_data["test_ce"][1],
+                     label="Val DAS CE Loss", color="gold")
+    
     ax1.tick_params(axis='y', labelcolor="black")
     ax1.grid(True)
 
@@ -401,8 +444,8 @@ def plot_loss_and_doa_over_epochs(
     
     if das_soft_epochs:
         ax2.plot(das_soft_epochs, das_soft_errors, label="DAS Error (soft)", color="red")
-    if das_argmax_epochs:
-        ax2.plot(das_argmax_epochs, das_argmax_errors, label="DAS Error (argmax)", color="purple")
+    #if das_argmax_epochs:
+    #    ax2.plot(das_argmax_epochs, das_argmax_errors, label="DAS Error (argmax)", color="purple")
 
     ax2.set_ylim(0, 120)
     ax2.tick_params(axis='y')

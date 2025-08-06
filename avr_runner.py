@@ -98,7 +98,7 @@ class AVR_Runner():
         self.logger.info("Train set size:%d, Test set size:%d", len(self.train_set), len(self.test_set))
 
         # loss settings
-        self.criterion = Criterion(kwargs_train)
+        self.criterion = Criterion(kwargs_train, kwargs_render)
 
 
     def load_checkpoints(self):
@@ -178,13 +178,13 @@ class AVR_Runner():
                     pred_sig = pred_sig[...,0] + 1j * pred_sig[...,1]
                     ori_sig = (ori_sig.cuda()).to(pred_sig.dtype)
 
-                    spec_loss, amplitude_loss, angle_loss, time_loss, energy_loss, multi_stft_loss, _, _ = self.criterion(pred_sig, ori_sig)
+                    spec_loss, amplitude_loss, angle_loss, time_loss, energy_loss, multi_stft_loss, das_reg_loss, das_ce_loss, _, _ = self.criterion(pred_sig, ori_sig)
         
                     if torch.isnan(energy_loss).item():
                         print("Nan loss detected")
                         continue
 
-                    total_loss = spec_loss + amplitude_loss + angle_loss + time_loss + energy_loss + multi_stft_loss
+                    total_loss = spec_loss + amplitude_loss + angle_loss + time_loss + energy_loss + multi_stft_loss + das_reg_loss + das_ce_loss
                     
                     self.optimizer.zero_grad()
                     total_loss.backward()
@@ -209,8 +209,8 @@ class AVR_Runner():
 
                     pbar.update(1)
                     pbar.set_description(f"{self.expname} Iteration {self.current_iteration}/{self.total_iterations}")
-                    pbar.set_postfix_str('loss = {:.4f}, multi stft loss:{:.4f}, spec loss:{:.3f}, amp loss:{:.3f}, angle loss:{:.3f}, time loss:{:.3f}, energy loss:{:.3f}, lr = {:.6f}'.format( \
-                        total_loss.item(), multi_stft_loss, spec_loss, amplitude_loss, angle_loss, time_loss, energy_loss, self.optimizer.param_groups[0]['lr']))
+                    pbar.set_postfix_str('loss = {:.4f}, multi stft loss:{:.4f}, spec loss:{:.3f}, amp loss:{:.3f}, angle loss:{:.3f}, time loss:{:.3f}, energy loss:{:.3f}, das reg loss:{:.3f}, das ce loss:{:.3f}, lr = {:.6f}'.format( \
+                        total_loss.item(), multi_stft_loss, spec_loss, amplitude_loss, angle_loss, time_loss, energy_loss, das_reg_loss, das_ce_loss, self.optimizer.param_groups[0]['lr']))
 
                     if self.current_iteration % self.save_freq == 0:
                         ckptname = self.save_checkpoint()
@@ -220,7 +220,7 @@ class AVR_Runner():
                         self.logger.info("Start evaluation")
                         self.renderer.eval()
 
-                        valid_losses = {'spec_loss': 0, 'fft_loss': 0, 'time_loss': 0, 'energy_loss': 0, 'multi_stft_loss': 0}
+                        valid_losses = {'spec_loss': 0, 'fft_loss': 0, 'time_loss': 0, 'energy_loss': 0, 'multi_stft_loss': 0, 'das_reg_loss': 0, 'das_ce_loss': 0}
                         valid_metrics = {'Angle': 0, 'Amplitude': 0, 'Envelope': 0, 'T60': 0, 'C50': 0, 'EDT': 0, 'multi_stft': 0}
                         valid_metrics_for_std = {'Angle': [], 'Amplitude': [], 'Envelope': [], 'T60': [], 'C50': [], 'EDT': [], 'multi_stft': []}
 
@@ -315,7 +315,7 @@ class AVR_Runner():
                         self.logger.info('STD Angle:{:.3f}, Amplitude:{:.4f}, Envelope:{:.4f}, T60:{:.5f}, C50:{:.5f}, EDT:{:.5f}, multi_stft:{:.4f}'.format( \
                         std_metrics['Angle'], std_metrics['Amplitude'], std_metrics['Envelope'], std_metrics['T60'], std_metrics['C50'], std_metrics['EDT'], std_metrics['multi_stft']))
 
-                        train_losses = {'spec_loss': 0, 'fft_loss': 0, 'time_loss': 0, 'energy_loss': 0, 'multi_stft_loss': 0}
+                        train_losses = {'spec_loss': 0, 'fft_loss': 0, 'time_loss': 0, 'energy_loss': 0, 'multi_stft_loss': 0, 'das_reg_loss': 0, 'das_ce_loss': 0}
                         train_metrics = {'Angle': 0, 'Amplitude': 0, 'Envelope': 0, 'T60': 0, 'C50': 0, 'EDT': 0, 'multi_stft': 0}
                         train_metrics_for_std = {'Angle': [], 'Amplitude': [], 'Envelope': [], 'T60': [], 'C50': [], 'EDT': [], 'multi_stft': []}
 
@@ -375,7 +375,7 @@ class AVR_Runner():
         """ calculate the metrics and losses
         """
         # Loss calculation
-        spec_loss, amplitude_loss, angle_loss, time_loss, energy_loss, multi_stft_loss, ori_time, pred_time = self.criterion(pred_sig, ori_sig)
+        spec_loss, amplitude_loss, angle_loss, time_loss, energy_loss, multi_stft_loss, das_reg_loss, das_ce_loss, ori_time, pred_time = self.criterion(pred_sig, ori_sig)
 
         # Metrics calculation
         angle_error, amp_error, env_error, t60_error, edt_error, C50_error, multi_stft, _, _ = metric_cal(
@@ -389,7 +389,9 @@ class AVR_Runner():
             'fft_loss': amplitude_loss + angle_loss,
             'time_loss': time_loss,
             'energy_loss': energy_loss,
-            'multi_stft_loss': multi_stft_loss
+            'multi_stft_loss': multi_stft_loss,
+            'das_reg_loss': das_reg_loss,
+            'das_ce_loss': das_ce_loss
         }
 
         metrics = {
