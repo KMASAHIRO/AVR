@@ -41,6 +41,7 @@ train:
   multistft_loss_weight: 1
   das_reg_loss_weight: 1
   das_ce_loss_weight: 1
+  beta: 100
 
 
 ### model settings  

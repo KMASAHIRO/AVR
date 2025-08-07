@@ -163,8 +163,8 @@ def run_delay_and_sum_on_npz(
         # XY平面でのマイク位置
         mic_pos = rx_pos[:, :2]
         mic_center = np.mean(mic_pos, axis=0)
-        mic_pos_centered = mic_pos - mic_center
-        mic_pos_tensor = torch.tensor(mic_pos_centered, dtype=torch.float32)  # (M, 2)
+        mic_angles = torch.linspace(math.pi/2, math.pi/2+2*math.pi, M+1)[:-1]
+        mic_pos_tensor = torch.stack([torch.cos(mic_angles), torch.sin(mic_angles)], dim=-1)
 
         # True DoA角度 (0~360)
         dx, dy = tx_pos[0] - mic_center[0], tx_pos[1] - mic_center[1]
@@ -335,8 +335,6 @@ def plot_loss_and_doa_over_epochs(
         else:
             nonzero_flags.append(False)
 
-    das_all_nonzero = all(nonzero_flags)
-
     # === DoA処理 ===
     npz_files = sorted([
         f for f in os.listdir(doa_npz_dir)
@@ -420,19 +418,18 @@ def plot_loss_and_doa_over_epochs(
     ax1.plot(train_epochs, train_values, label="Train Loss", color="blue")
     ax1.plot(test_epochs, test_values, label="Val Loss", color="orange")
 
-    if das_all_nonzero:
-        if "train_reg" in das_data:
-            ax1.plot(das_data["train_reg"][0], das_data["train_reg"][1],
-                     label="Train DAS Reg Loss", color="cyan")
-        if "train_ce" in das_data:
-            ax1.plot(das_data["train_ce"][0], das_data["train_ce"][1],
-                     label="Train DAS CE Loss", color="magenta")
-        if "test_reg" in das_data:
-            ax1.plot(das_data["test_reg"][0], das_data["test_reg"][1],
-                     label="Val DAS Reg Loss", color="deepskyblue")
-        if "test_ce" in das_data:
-            ax1.plot(das_data["test_ce"][0], das_data["test_ce"][1],
-                     label="Val DAS CE Loss", color="gold")
+    if "train_reg" in das_data:
+        ax1.plot(das_data["train_reg"][0], das_data["train_reg"][1],
+                 label="Train DAS Reg Loss", color="cyan")
+    if "train_ce" in das_data:
+        ax1.plot(das_data["train_ce"][0], das_data["train_ce"][1],
+                 label="Train DAS CE Loss", color="magenta")
+    if "test_reg" in das_data:
+        ax1.plot(das_data["test_reg"][0], das_data["test_reg"][1],
+                 label="Val DAS Reg Loss", color="deepskyblue")
+    if "test_ce" in das_data:
+        ax1.plot(das_data["test_ce"][0], das_data["test_ce"][1],
+                 label="Val DAS CE Loss", color="gold")
     
     ax1.tick_params(axis='y', labelcolor="black")
     ax1.grid(True)

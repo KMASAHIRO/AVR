@@ -47,7 +47,7 @@ class Criterion(nn.Module):
         M_, F = X.shape
 
         # マイク円形配置仮定
-        mic_angles = torch.linspace(0, 2*math.pi, M+1)[:-1].to(sig.device)
+        mic_angles = torch.linspace(math.pi/2, math.pi/2+2*math.pi, M+1)[:-1].to(sig.device)
         mic_pos = torch.stack([torch.cos(mic_angles), torch.sin(mic_angles)], dim=-1)
         mic_pos -= mic_pos.mean(dim=0)
 
@@ -102,21 +102,17 @@ class Criterion(nn.Module):
         das_ce_loss = torch.tensor(0.0, device=pred_sig.device)
 
         if self.das_reg_loss_weight > 0 or self.das_ce_loss_weight > 0:
-            power_pred = self.compute_beamforming_power(pred_sig)
-            power_ori = self.compute_beamforming_power(ori_sig)
-
-            logits_pred = self.beta * (power_pred / (torch.sum(power_pred) + 1e-8))
-            logits_ori = self.beta * (power_ori / (torch.sum(power_ori) + 1e-8))
-
-            target_bin = torch.argmax(logits_ori).unsqueeze(0)
+            power_pred = self.compute_beamforming_power(pred_sig)  # (K,)
+            power_ori = self.compute_beamforming_power(ori_sig)    # (K,)
 
             if self.das_ce_loss_weight > 0:
-                ce_loss = F.cross_entropy(logits_pred.unsqueeze(0), target_bin)
+                target_bin = torch.argmax(power_ori).unsqueeze(0)  # index of GT direction
+                ce_loss = F.cross_entropy(power_pred.unsqueeze(0), target_bin)
                 das_ce_loss = ce_loss * self.das_ce_loss_weight
 
             if self.das_reg_loss_weight > 0:
-                weights_pred = torch.softmax(logits_pred, dim=0)
-                weights_ori = torch.softmax(logits_ori, dim=0)
+                weights_pred = torch.softmax(self.beta * power_pred, dim=0)
+                weights_ori = torch.softmax(self.beta * power_ori, dim=0)
 
                 pred_angle_rad = torch.sum(weights_pred * self.angles_rad.to(pred_sig.device))
                 true_angle_rad = torch.sum(weights_ori * self.angles_rad.to(pred_sig.device))
