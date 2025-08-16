@@ -2,7 +2,7 @@
 
 ### Path settings
 path:
-  expname: Real_exp_ch_emb_add_das_param_1_1
+  expname: Real_exp_ch_emb_add_das_param_4_1
   dataset_type: Real_env
   logdir: logs/real_exp_ch_emb_add_das/
 
@@ -24,11 +24,11 @@ render:
 ### training settings
 train:
   batch_size: 8
-  lr: 1e-5
+  lr: 1e-4
   weight_decay: 0
-  T_max: 16600
-  eta_min: 1e-6
-  total_iterations: 16600
+  T_max: 8300
+  eta_min: 1e-5
+  total_iterations: 8300
   load_ckpt: False
   save_freq: 8300
   val_freq: 166
@@ -40,7 +40,7 @@ train:
   energy_loss_weight: 1
   multistft_loss_weight: 1
   das_reg_loss_weight: 1
-  das_ce_loss_weight: 1
+  das_ce_loss_weight: 0
   beta: 100
 
 

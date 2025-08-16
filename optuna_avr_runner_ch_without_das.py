@@ -16,6 +16,8 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
     # === ハイパラ探索範囲 ===
     if trial:
         batch_size = 2 ** trial.suggest_int('batch_size', 0, 3)
+        lr = trial.suggest_float('lr', 1e-6, 1e-4, log=True)
+        eta_min = trial.suggest_float("eta_min", lr * 1e-2, lr * 5e-1, log=True)
         n_samples = trial.suggest_int('n_samples', 40, 80)
         n_azi = trial.suggest_int('n_azi', 48, 80)
         weight_decay = trial.suggest_float('weight_decay', 0, 1e-3)
@@ -27,8 +29,40 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
         sigma_enc_neurons = 2 ** trial.suggest_int('sigma_encoder_network_n_neurons', 5, 9)
         sigma_dec_neurons = 2 ** trial.suggest_int('sigma_decoder_network_n_neurons', 5, 9)
         signal_neurons = 2 ** trial.suggest_int('signal_network_n_neurons', 7, 10)
+
+        # channel_embed 関連
+        is_embed = trial.suggest_categorical('is_embed', [True, False])
+        connection_type = None
+        emb_dim_enc = 0
+        emb_dim_dec = 0
+        emb_dim_sig = 0
+        is_sigma_encoder = False
+        is_sigma_decoder = False
+        is_signal_network = False
+
+        if is_embed:
+            connection_type = trial.suggest_categorical('channel_embed_connection_type', ['add', 'concat'])
+
+            if connection_type == 'concat':
+                is_sigma_encoder = trial.suggest_categorical('is_sigma_encoder', [True, False])
+                is_sigma_decoder = trial.suggest_categorical('is_sigma_decoder', [True, False])
+                is_signal_network = trial.suggest_categorical('is_signal_network', [True, False])
+                if is_sigma_encoder:
+                    emb_dim_enc = 2 ** trial.suggest_int('emb_dim_sigma_encoder', 5, 8)
+                if is_sigma_decoder:
+                    emb_dim_dec = 2 ** trial.suggest_int('emb_dim_sigma_decoder', 5, 8)
+                if is_signal_network:
+                    emb_dim_sig = 2 ** trial.suggest_int('emb_dim_signal_network', 5, 8)
+            elif connection_type == 'add':
+                is_sigma_encoder = trial.suggest_categorical('is_sigma_encoder', [True, False])
+                is_sigma_decoder = trial.suggest_categorical('is_sigma_decoder', [True, False])
+                is_signal_network = trial.suggest_categorical('is_signal_network', [True, False])
     else:
+        # trial指定なし → configからそのまま
+        das_reg_loss_weight = config['train'].get('das_reg_loss_weight', 0)
         batch_size = config['train']['batch_size']
+        lr = config['train']['lr']
+        eta_min = config['train']['eta_min']
         n_samples = config['render']['n_samples']
         n_azi = config['render']['n_azi']
         weight_decay = config['train']['weight_decay']
@@ -41,6 +75,16 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
         sigma_dec_neurons = config['model']['sigma_decoder_network']['n_neurons']
         signal_neurons = config['model']['signal_network']['n_neurons']
 
+        channel_embed_cfg = config['model'].get('channel_embed', {})
+        is_embed = channel_embed_cfg.get('is_embed', False)
+        connection_type = channel_embed_cfg.get('connection_type', None)
+        is_sigma_encoder = channel_embed_cfg.get('is_sigma_encoder', False)
+        is_sigma_decoder = channel_embed_cfg.get('is_sigma_decoder', False)
+        is_signal_network = channel_embed_cfg.get('is_signal_network', False)
+        emb_dim_enc = channel_embed_cfg.get('emb_dim_sigma_encoder', 0)
+        emb_dim_dec = channel_embed_cfg.get('emb_dim_sigma_decoder', 0)
+        emb_dim_sig = channel_embed_cfg.get('emb_dim_signal_network', 0)
+
     # === バッチサイズスケーリング（切り上げ）===
     scale = batch_size / config['train']['batch_size']
     config['train']['batch_size'] = batch_size
@@ -50,6 +94,9 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
     config['train']['val_freq'] = math.ceil(config['train']['val_freq'] / scale)
 
     # === その他パラメータ更新 ===
+    config['train']['lr'] = lr
+    config['train']['eta_min'] = eta_min
+    config['train']['das_reg_loss_weight'] = das_reg_loss_weight
     config['render']['n_samples'] = n_samples
     config['render']['n_azi'] = n_azi
     config['train']['weight_decay'] = weight_decay
@@ -62,6 +109,19 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
     config['model']['sigma_encoder_network']['n_neurons'] = sigma_enc_neurons
     config['model']['sigma_decoder_network']['n_neurons'] = sigma_dec_neurons
     config['model']['signal_network']['n_neurons'] = signal_neurons
+
+    # channel_embed関連の設定
+    if 'channel_embed' not in config['model']:
+        config['model']['channel_embed'] = {}
+
+    config['model']['channel_embed']['is_embed'] = is_embed
+    config['model']['channel_embed']['connection_type'] = connection_type
+    config['model']['channel_embed']['is_sigma_encoder'] = is_sigma_encoder
+    config['model']['channel_embed']['is_sigma_decoder'] = is_sigma_decoder
+    config['model']['channel_embed']['is_signal_network'] = is_signal_network
+    config['model']['channel_embed']['emb_dim_sigma_encoder'] = emb_dim_enc
+    config['model']['channel_embed']['emb_dim_sigma_decoder'] = emb_dim_dec
+    config['model']['channel_embed']['emb_dim_signal_network'] = emb_dim_sig
 
     # === expname 更新 ===
     trial_num = base_start_index if trial_index is None else base_start_index + trial_index

@@ -15,20 +15,20 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
 
     # === ハイパラ探索範囲 ===
     if trial:
-        batch_size = 2 ** trial.suggest_int('batch_size', 0, 3)
         n_samples = trial.suggest_int('n_samples', 40, 80)
         n_azi = trial.suggest_int('n_azi', 48, 80)
         weight_decay = trial.suggest_float('weight_decay', 0, 1e-3)
-        spec_loss_weight = trial.suggest_float('spec_loss_weight', 0, 100)
-        angle_loss_weight = trial.suggest_float('angle_loss_weight', 0, 100)
-        time_loss_weight = trial.suggest_float('time_loss_weight', 0, 100)
-        energy_loss_weight = trial.suggest_float('energy_loss_weight', 0, 100)
-        multistft_loss_weight = trial.suggest_float('multistft_loss_weight', 0, 100)
+        spec_loss_weight = trial.suggest_float('spec_loss_weight', 1, 100)
+        angle_loss_weight = trial.suggest_float('angle_loss_weight', 1, 100)
+        time_loss_weight = trial.suggest_float('time_loss_weight', 1, 100)
+        energy_loss_weight = trial.suggest_float('energy_loss_weight', 1, 100)
+        multistft_loss_weight = trial.suggest_float('multistft_loss_weight', 1, 100)
+        das_reg_loss_weight = trial.suggest_float('das_reg_loss_weight', 1, 100)
         sigma_enc_neurons = 2 ** trial.suggest_int('sigma_encoder_network_n_neurons', 5, 9)
         sigma_dec_neurons = 2 ** trial.suggest_int('sigma_decoder_network_n_neurons', 5, 9)
         signal_neurons = 2 ** trial.suggest_int('signal_network_n_neurons', 7, 10)
+        emb_dim = 2 ** trial.suggest_int('emb_dim', 5, 8)
     else:
-        batch_size = config['train']['batch_size']
         n_samples = config['render']['n_samples']
         n_azi = config['render']['n_azi']
         weight_decay = config['train']['weight_decay']
@@ -37,17 +37,11 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
         time_loss_weight = config['train']['time_loss_weight']
         energy_loss_weight = config['train']['energy_loss_weight']
         multistft_loss_weight = config['train']['multistft_loss_weight']
+        das_reg_loss_weight = config['train']['das_reg_loss_weight']
         sigma_enc_neurons = config['model']['sigma_encoder_network']['n_neurons']
         sigma_dec_neurons = config['model']['sigma_decoder_network']['n_neurons']
         signal_neurons = config['model']['signal_network']['n_neurons']
-
-    # === バッチサイズスケーリング（切り上げ）===
-    scale = batch_size / config['train']['batch_size']
-    config['train']['batch_size'] = batch_size
-    config['train']['T_max'] = math.ceil(config['train']['T_max'] / scale)
-    config['train']['total_iterations'] = math.ceil(config['train']['total_iterations'] / scale)
-    config['train']['save_freq'] = math.ceil(config['train']['save_freq'] / scale)
-    config['train']['val_freq'] = math.ceil(config['train']['val_freq'] / scale)
+        emb_dim = config['model'].get('channel_embed', {}).get('emb_dim', 128)
 
     # === その他パラメータ更新 ===
     config['render']['n_samples'] = n_samples
@@ -58,10 +52,14 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
     config['train']['time_loss_weight'] = time_loss_weight
     config['train']['energy_loss_weight'] = energy_loss_weight
     config['train']['multistft_loss_weight'] = multistft_loss_weight
+    config['train']['das_reg_loss_weight'] = das_reg_loss_weight
 
     config['model']['sigma_encoder_network']['n_neurons'] = sigma_enc_neurons
     config['model']['sigma_decoder_network']['n_neurons'] = sigma_dec_neurons
     config['model']['signal_network']['n_neurons'] = signal_neurons
+
+    if 'channel_embed' in config['model']:
+        config['model']['channel_embed']['emb_dim'] = emb_dim
 
     # === expname 更新 ===
     trial_num = base_start_index if trial_index is None else base_start_index + trial_index
@@ -138,26 +136,11 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_dir', type=str, required=True)
     parser.add_argument('--start_index', type=int, required=True)
     parser.add_argument('--n_trials', type=int, default=50)
-    # 追加: スタディ名と保存先（SQLite）
-    parser.add_argument('--study_name', type=str, default='avr_optuna_study',
-                        help='Optuna study name (used for resume)')
-    parser.add_argument('--storage', type=str, default='sqlite:///./optuna_avr.db',
-                        help='Optuna storage URL; SQLite file will be created if missing.')
     args = parser.parse_args()
 
     with open(args.config, 'r') as file:
         base_config = yaml.load(file, Loader=yaml.FullLoader)
 
-    # ここだけ変更: storage を指定し、load_if_exists=True で再開可能に
-    study = optuna.create_study(
-        study_name=args.study_name,
-        storage=args.storage,
-        load_if_exists=True,
-        direction="minimize",
-    )
+    study = optuna.create_study(direction="minimize")
     study.optimize(objective, n_trials=args.n_trials)
-
     print("Best parameters:", study.best_params)
-    print("Best value:", study.best_value)
-    print("Study name:", study.study_name)
-    print("Storage:", args.storage)
