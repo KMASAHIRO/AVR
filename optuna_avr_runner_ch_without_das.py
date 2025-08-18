@@ -59,7 +59,6 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
                 is_signal_network = trial.suggest_categorical('is_signal_network', [True, False])
     else:
         # trial指定なし → configからそのまま
-        das_reg_loss_weight = config['train'].get('das_reg_loss_weight', 0)
         batch_size = config['train']['batch_size']
         lr = config['train']['lr']
         eta_min = config['train']['eta_min']
@@ -96,7 +95,6 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
     # === その他パラメータ更新 ===
     config['train']['lr'] = lr
     config['train']['eta_min'] = eta_min
-    config['train']['das_reg_loss_weight'] = das_reg_loss_weight
     config['render']['n_samples'] = n_samples
     config['render']['n_azi'] = n_azi
     config['train']['weight_decay'] = weight_decay

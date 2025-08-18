@@ -221,17 +221,17 @@ class AVRModel(nn.Module):
         signal_base = torch.cat([sigma_feat, dir_enc, tx_enc], dim=-1)
 
         if self.signal_mode == "injection":
-            signal_out = self._model_signal(signal_base, ch_idx_expanded)
+            signal_output = self._model_signal(signal_base, ch_idx_expanded)
         else:
             if self.signal_mode == "concat" and ch_idx_expanded is not None:
                 sig_emb = self.signal_channel_embedding[ch_idx_expanded]
                 signal_in = torch.cat([signal_base, sig_emb], dim=-1)
             else:
                 signal_in = signal_base
-            signal_out = self._model_signal(signal_in)
+            signal_output = self._model_signal(signal_in)
 
         attn = abs(F.leaky_relu(attn)).view(bs, n_ray_points, 1)
-        signal_out = signal_out.view(bs, n_ray_points, self.signal_output_dim)
+        signal_output = signal_output.view(bs, n_ray_points, self.signal_output_dim)
         return attn, signal_output
 
 
