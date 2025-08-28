@@ -16,6 +16,8 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
     # === ハイパラ探索範囲 ===
     if trial:
         batch_size = 2 ** trial.suggest_int('batch_size', 0, 3)
+        lr = trial.suggest_float('lr', 1e-6, 1e-4, log=True)
+        eta_min = trial.suggest_float("eta_min", lr * 1e-2, lr * 5e-1, log=True)
         n_samples = trial.suggest_int('n_samples', 40, 80)
         n_azi = trial.suggest_int('n_azi', 48, 80)
         weight_decay = trial.suggest_float('weight_decay', 0, 1e-3)
@@ -29,6 +31,8 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
         signal_neurons = 2 ** trial.suggest_int('signal_network_n_neurons', 7, 10)
     else:
         batch_size = config['train']['batch_size']
+        lr = config['train']['lr']
+        eta_min = config['train']['eta_min']
         n_samples = config['render']['n_samples']
         n_azi = config['render']['n_azi']
         weight_decay = config['train']['weight_decay']
@@ -50,6 +54,8 @@ def update_config(config, base_start_index, trial_index=None, trial=None):
     config['train']['val_freq'] = math.ceil(config['train']['val_freq'] / scale)
 
     # === その他パラメータ更新 ===
+    config['train']['lr'] = lr
+    config['train']['eta_min'] = eta_min
     config['render']['n_samples'] = n_samples
     config['render']['n_azi'] = n_azi
     config['train']['weight_decay'] = weight_decay
