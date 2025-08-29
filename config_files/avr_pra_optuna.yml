@@ -2,9 +2,9 @@
 
 ### Path settings
 path:
-  expname: Pra_param_6_1
+  expname: Pra_optuna_param_6_1
   dataset_type: Real_env
-  logdir: logs/pra/
+  logdir: logs/pra_optuna/
 
 
 ### rendering settings
