@@ -191,7 +191,7 @@ def plot_trialwise_doa_mean_and_losses_discovered(
     df = pd.DataFrame(rows)
     df.to_csv(csv_output_path, index=False)
 
-    # --- 描画（横軸=trial index） ---
+    # --- 描画（横軸=trial index、目盛は10ごと／右軸グリッド） ---
     fig, ax1 = plt.subplots(figsize=(14, 6))
 
     # 左軸：Loss
@@ -216,8 +216,20 @@ def plot_trialwise_doa_mean_and_losses_discovered(
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
 
-    # x 軸は trial index（1,2,3,...）
-    plt.xticks(trial_idx)
+    # x 軸は trial index（1,2,3,...）で、目盛は 10 ごとに表示
+    N = len(trial_idx)
+    if N <= 10:
+        ticks = trial_idx  # 少ないときは全部表示
+    else:
+        start, end = trial_idx[0], trial_idx[-1]
+        step = 10
+        ticks = list(range(start, end + 1, step))
+        # 端が入っていなければ追加（見切れ防止）
+        if ticks[0] != start:
+            ticks = [start] + ticks
+        if ticks[-1] != end:
+            ticks.append(end)
+    ax1.set_xticks(ticks)   # 数値そのまま（ラベル文字列にはしない）
 
     plt.title("Trial-wise DoA Mean Error and Loss (at DoA mean)")
     plt.tight_layout()
