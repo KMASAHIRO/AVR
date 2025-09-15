@@ -191,36 +191,38 @@ def plot_trialwise_doa_mean_and_losses_discovered(
     df = pd.DataFrame(rows)
     df.to_csv(csv_output_path, index=False)
 
-        # --- 描画（横軸=trial index） ---
-    fig, ax1 = plt.subplots(figsize=(12, 5.5))
+    # --- 描画（横軸=trial index） ---
+    fig, ax1 = plt.subplots(figsize=(14, 6))
+
+    # 左軸：Loss
     ax1.set_xlabel("Trial Index")
     ax1.set_ylabel("Loss", color="black")
-    ax1.plot(trial_idx, train_losses_at_min, marker="o", label="Train Loss @ DoA mean")
-    ax1.plot(trial_idx, val_losses_at_min, marker="o", label="Val Loss @ DoA mean")
+    ax1.plot(trial_idx, train_losses_at_mean, marker="o", label="Train Loss @ DoA mean")
+    ax1.plot(trial_idx, val_losses_at_mean, marker="o", label="Val Loss @ DoA mean")
     ax1.tick_params(axis="y", labelcolor="black")
+    ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.grid(False)  # 左軸グリッドはOFF
 
-    # grid を右軸に合わせる
-    ax1.grid(False)  
+    # 右軸：DoA（緑固定）
     ax2 = ax1.twinx()
     ax2.set_ylabel("DoA Mean Error (°)")
-    ax2.plot(trial_idx, doa_means, marker="s", color="green", label="DoA mean", linewidth=2)
+    ax2.plot(trial_idx, doa_means, marker="s", label="DoA mean", linewidth=2, color="green")
     ax2.set_ylim(*ylim_doa)
     ax2.tick_params(axis="y")
-    ax2.grid(True, alpha=0.3)  # grid は右軸基準
+    ax2.grid(True, axis="y", alpha=0.3)  # 右軸の目盛りに揃うグリッド
 
     # 凡例（左右統合）
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
 
-    # trial index をそのまま x 軸に
+    # x 軸は trial index（1,2,3,...）
     plt.xticks(trial_idx)
 
     plt.title("Trial-wise DoA Mean Error and Loss (at DoA mean)")
     plt.tight_layout()
     plt.savefig(figure_output_path, dpi=300)
     plt.close()
-
 
 # ====== CLI ======
 if __name__ == "__main__":
