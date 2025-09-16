@@ -59,7 +59,7 @@ def run_trialwise(
 ):
     """
     1) trialごとに：各条件の epoch曲線を並べた1枚の図を tdir 以下に保存
-       保存先: {tdir}/doa_compare_stft_conditions/_plots/epoch_curves_grid.png
+       保存先: {tdir}/doa_compare_stft_conditions/epoch_curves_grid.png
     2) 全trialを処理後：条件ごとに trial軸の最小平均誤差をまとめたパネルを1枚で保存
        保存先: combined_minplot_path
     3) CSVに trial×condition の min(mean DoA error) を保存
@@ -124,7 +124,7 @@ def run_trialwise(
         plt.close()
 
     # === 条件ごとの trial軸パネルを1枚に ===
-    _ensure_dir(combined_minplot_path)
+    _ensure_dir(os.path.dirname(combined_minplot_path) or ".")
     K = len(conditions)
     ncols = min(3, K)
     nrows = (K + ncols - 1) // ncols
@@ -153,7 +153,7 @@ def run_trialwise(
     plt.close()
 
     # === CSV保存 ===
-    _ensure_dir(csv_output_path)
+    _ensure_dir(os.path.dirname(csv_output_path) or ".")
     df = pd.DataFrame(csv_rows)
     df.to_csv(csv_output_path, index=False)
 
