@@ -158,7 +158,7 @@ def compute_condition_for_trial(
 
     for npz_path in npz_paths:
         it = _iter_from_fname(npz_path)
-        out_pkl = os.path.join(cond_dir, f"val_iter{it}.pkl" if it >= 0 else (os.path.basename(npz_path).replace(".npz", ".pkl")))
+        out_pkl = os.path.join(cond_dir, f"val_iter{it}.pkl")
         if (not force) and os.path.isfile(out_pkl):
             # 既存 pkl から読み込み
             try:
@@ -333,7 +333,7 @@ if __name__ == "__main__":
                         default="avr_tuning_logs/real_exp/doa_compare_stft_conditions.csv")
 
     # 入力 npz の場所/パターン（必要に応じて調整）
-    parser.add_argument("--npz_dirname", type=str, default="val_results",
+    parser.add_argument("--npz_dirname", type=str, default="val_result",
                         help="Where val_iter*.npz live under each tdir; fallback to tdir if not found")
     parser.add_argument("--npz_glob", type=str, default="val_iter*.npz")
     parser.add_argument("--fs", type=int, default=16000)
