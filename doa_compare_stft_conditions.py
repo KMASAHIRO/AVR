@@ -52,6 +52,17 @@ def _compute_stft(signals: np.ndarray, n_fft: int, hop: int, win):
         for sig in signals
     ])  # -> (C, n_frames, n_freq)
 
+def _top1_deg_from_doa(doa_obj, algo_name: str) -> float:
+    """
+    DoA オブジェクトから最尤方位の角度[deg]を取得（grid → index → azimuth[rad] → deg）。
+    """
+    if algo_name == 'FRIDA':
+        idx = int(np.argmax(np.abs(doa_obj._gen_dirty_img())))
+    else:
+        idx = int(np.argmax(doa_obj.grid.values))
+    az_rad = doa_obj.grid.azimuth[idx]  # [rad]
+    return float((np.degrees(az_rad)) % 360.0)
+
 # ========== DoA 実行（1つの npz に対して） ==========
 def run_doa_on_npz_eval(
     npz_path: str,
@@ -64,7 +75,7 @@ def run_doa_on_npz_eval(
 ) -> Dict[str, List[Optional[float]]]:
     """
     既存の npz（pred_sig, ori_sig 等）を読み、指定 STFT で DoA を実行。
-    戻り値: {"pred_vs_true_error": [...]}（グループごとに1要素）
+    戻り値: 3本 {"pred_vs_gt_error": [...], "pred_vs_true_error": [...], "gt_vs_true_error": [...]}（各グループ1要素）
     """
     data = np.load(npz_path)
     pred_sig = data['pred_sig']        # (N, T) complex64 (freq-domain IR)
@@ -77,7 +88,11 @@ def run_doa_on_npz_eval(
     G = N // M
 
     win = _make_window(win_name, n_fft)
-    results = { "pred_vs_true_error": [] }
+    results = {
+        "pred_vs_gt_error":   [],
+        "pred_vs_true_error": [],
+        "gt_vs_true_error":   [],
+    }
 
     for g in range(G):
         idxs = np.arange(g*M, (g+1)*M)
@@ -86,43 +101,46 @@ def run_doa_on_npz_eval(
         rx_pos = position_rx[idxs]
         tx_pos = position_tx[idxs][0]
 
-        mic_pos = rx_pos.T
+        # マイクアレイ作成（円形 2D）
+        mic_pos = rx_pos.T  # (3, M)
         mic_center = np.mean(mic_pos[:2, :], axis=1)
-
         mic_array = pra.beamforming.circular_2D_array(
             center=mic_center, M=M, radius=mic_radius, phi0=np.pi/2
         )
 
+        # 幾何真値角（参照用）
         dx, dy = tx_pos[0] - mic_center[0], tx_pos[1] - mic_center[1]
-        true_deg = (np.degrees(math.atan2(dy, dx)) % 360)
+        true_deg = (np.degrees(math.atan2(dy, dx)) % 360.0)
 
         # freq-IR -> time-IR
         pred_time = torch.real(torch.fft.irfft(torch.tensor(pred_group), dim=-1)).cpu().numpy().astype(np.float32)
         ori_time  = torch.real(torch.fft.irfft(torch.tensor(ori_group),  dim=-1)).cpu().numpy().astype(np.float32)
 
-        # STFT
-        X_pred = _compute_stft(pred_time, n_fft, hop, win)    # (C, Tfrm, F)
+        # STFT: -> (C, F, Tfrm)
+        X_pred = _compute_stft(pred_time, n_fft, hop, win)
         X_ori  = _compute_stft(ori_time,  n_fft, hop, win)
-        X_pred = np.transpose(X_pred, (0, 2, 1))              # (C, F, Tfrm)
+        X_pred = np.transpose(X_pred, (0, 2, 1))
         X_ori  = np.transpose(X_ori,  (0, 2, 1))
 
         try:
+            # 予測と GT（=ori_sig）の双方で DoA 実行
             doa_pred = pra.doa.algorithms[algo_name](mic_array, fs=fs, nfft=n_fft)
             doa_pred.locate_sources(X_pred)
+            pred_deg = _top1_deg_from_doa(doa_pred, algo_name)
 
             doa_gt = pra.doa.algorithms[algo_name](mic_array, fs=fs, nfft=n_fft)
             doa_gt.locate_sources(X_ori)
+            gt_deg = _top1_deg_from_doa(doa_gt, algo_name)
 
-            if algo_name == 'FRIDA':
-                pred_deg = np.argmax(np.abs(doa_pred._gen_dirty_img()))
-            else:
-                pred_deg = np.argmax(doa_pred.grid.values)
-
-            err_pred_vs_true = angular_error_deg(pred_deg, true_deg)
-            results["pred_vs_true_error"].append(err_pred_vs_true)
+            # 3つの誤差をすべて保存
+            results["pred_vs_gt_error"].append(angular_error_deg(pred_deg, gt_deg))
+            results["pred_vs_true_error"].append(angular_error_deg(pred_deg, true_deg))
+            results["gt_vs_true_error"].append(angular_error_deg(gt_deg,   true_deg))
 
         except Exception:
+            results["pred_vs_gt_error"].append(None)
             results["pred_vs_true_error"].append(None)
+            results["gt_vs_true_error"].append(None)
 
     return results
 
@@ -140,7 +158,7 @@ def compute_condition_for_trial(
     """
     tdir/npz_dirname/npz_glob を走査し、各 npz に対して DoA を実行し
     tdir/doa_compare_stft_conditions/<cond_tag>/val_iter*.pkl を作成。
-    そのうえで (iters[], mean_errors[]) を返す。
+    そのうえで (iters[], mean_errors[]) を返す。集計対象は error_key で選択。
     """
     win_name, n_fft, hop = _parse_condition_tag(cond_tag)
     cond_dir = os.path.join(tdir, "doa_compare_stft_conditions", cond_tag)
@@ -173,7 +191,7 @@ def compute_condition_for_trial(
             except Exception:
                 pass  # 壊れていたら再計算へ続行
 
-        # DoA 計算
+        # DoA 計算（3本すべて）
         res = run_doa_on_npz_eval(
             npz_path=npz_path,
             fs=fs,
@@ -183,12 +201,16 @@ def compute_condition_for_trial(
             algo_name=algo_name,
         )
 
-        # 保存形式：{algo_name: {error_key: list}}
-        out_data = {algo_name: {error_key: res["pred_vs_true_error"]}}
+        # 保存形式：{algo_name: {<3keys>: list}}
+        out_data = {algo_name: {
+            "pred_vs_gt_error":   res["pred_vs_gt_error"],
+            "pred_vs_true_error": res["pred_vs_true_error"],
+            "gt_vs_true_error":   res["gt_vs_true_error"],
+        }}
         with open(out_pkl, "wb") as f:
             pickle.dump(out_data, f)
 
-        errs = [e for e in res["pred_vs_true_error"] if e is not None]
+        errs = [e for e in res.get(error_key, []) if e is not None]
         if errs:
             xs.append(it)
             ys.append(float(np.mean(errs)))
@@ -254,7 +276,7 @@ def run_trialwise(
 
             ax.set_title(title, fontsize=10)
             ax.set_xlabel("epoch(iter)")
-            ax.set_ylabel("mean DoA error (deg)")
+            ax.set_ylabel(f"mean DoA error (deg) [{error_key}]")
             ax.set_ylim(*ylim_doa)
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
             ax.grid(True, axis="y", alpha=0.3)
@@ -266,6 +288,7 @@ def run_trialwise(
                 "trial_index": t_index,
                 "trial_name": tname,
                 "condition": cond_tag,
+                "error_key": error_key,
                 "min_mean_error_deg": local_min,
             })
 
@@ -273,9 +296,9 @@ def run_trialwise(
         for i in range(K, nrows*ncols):
             fig.delaxes(axes[i // ncols][i % ncols])
 
-        plt.suptitle(f"Trial: {tname}  (epoch curves by STFT conditions)", y=1.02)
+        plt.suptitle(f"Trial: {tname}  (epoch curves by STFT conditions)  [{error_key}]", y=1.02)
         plt.tight_layout()
-        out_png = os.path.join(base_cond_dir, "epoch_curves_grid.png")
+        out_png = os.path.join(base_cond_dir, f"epoch_curves_grid__{error_key}.png")
         plt.savefig(out_png, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -292,7 +315,7 @@ def run_trialwise(
         y = cond_to_min_errors[cond_tag]
         ax.plot(x, y, marker="s", linewidth=1.5, label="min mean DoA err")
         ax.set_xlabel("Trial Index")
-        ax.set_ylabel("min mean DoA error (deg)")
+        ax.set_ylabel(f"min mean DoA error (deg) [{error_key}]")
         ax.set_ylim(*ylim_doa)
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         ax.grid(True, axis="y", alpha=0.3)
@@ -303,18 +326,23 @@ def run_trialwise(
     for i in range(K, nrows*ncols):
         fig.delaxes(axes[i // ncols][i % ncols])
 
-    plt.suptitle("DoA min(mean) across trials per STFT condition", y=1.02)
+    plt.suptitle(f"DoA min(mean) across trials per STFT condition  [{error_key}]", y=1.02)
     plt.tight_layout()
-    plt.savefig(combined_minplot_path, dpi=300, bbox_inches="tight")
+    # エラーキーをファイル名に含める
+    base, ext = os.path.splitext(combined_minplot_path)
+    out_combined = f"{base}__{error_key}{ext}"
+    plt.savefig(out_combined, dpi=300, bbox_inches="tight")
     plt.close()
 
-    # CSV 保存
+    # CSV 保存（error_key 列を含める）
     _ensure_dir(os.path.dirname(csv_output_path) or ".")
-    pd.DataFrame(csv_rows).to_csv(csv_output_path, index=False)
+    base_csv, ext_csv = os.path.splitext(csv_output_path)
+    out_csv = f"{base_csv}__{error_key}{ext_csv}"
+    pd.DataFrame(csv_rows).to_csv(out_csv, index=False)
 
 # ========== CLI ==========
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Trial-wise STFT-condition DoA pipeline (compute & plot, no losses).")
+    parser = argparse.ArgumentParser(description="Trial-wise STFT-condition DoA pipeline (compute & plot).")
     parser.add_argument("--logdir", type=str, default="logs/real_exp",
                         help="Base dir that contains each trial dir")
     parser.add_argument("--trial_begin", type=int, default=1)
@@ -325,7 +353,9 @@ if __name__ == "__main__":
                         help='Condition subdirs under {tdir}/doa_compare_stft_conditions/, '
                              'format: "doa_<win>_L<nfft>_H<hop>", e.g., "doa_rect_L128_H32" "doa_hann_L256_H64"')
     parser.add_argument("--algo_name", type=str, default="NormMUSIC")
-    parser.add_argument("--error_key", type=str, default="pred_vs_true_error")
+    # ★ デフォルトを pred_vs_gt_error に戻す
+    parser.add_argument("--error_key", type=str, default="pred_vs_gt_error",
+                        choices=["pred_vs_gt_error", "pred_vs_true_error", "gt_vs_true_error"])
     parser.add_argument("--ylim_doa", type=float, nargs=2, default=(0.0, 120.0))
     parser.add_argument("--combined_minplot_path", type=str,
                         default="avr_tuning_logs/real_exp/doa_compare_stft_conditions.png")

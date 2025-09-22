@@ -1,0 +1,38 @@
+npz: "~/logs/real_exp/Real_exp_param_34_1/val_result/val_iter006640.npz"
+which: "pred"      # pred から推定、ori は pred_vs_gt の参照として内部で自動使用
+fs: 16000
+seeds: [0, 1, 2]
+
+# バンドパス（Butterworth 4次 → filtfilt）
+bands:
+  - {name: "bp_0p5_6k",  low: 500,  high: 6000}
+  - {name: "bp_0p6_6k",  low: 600,  high: 6000}
+  - {name: "bp_1_4k",    low: 1000, high: 4000}
+  - {name: "bp_1p5_6k",  low: 1500, high: 6000}
+
+# 白色雑音の長さ（秒）
+noise_seconds: [0.5, 1.0, 2.0, 4.0, 8.0]
+
+# 時間フレーミング（Tseg と overlap から hop を算出）
+segments_ms: [50, 75, 100, 150, 200, 300, 400]
+overlap_factors: [0.75, 0.6667, 0.5]
+
+# STFT（nfft × hop_size × window）
+# hop はサンプル数で指定（例: nfft=512 のとき hop=256 or 128）
+stft_grid:
+  - {nfft: 256,  hop: 128,  win: "none"}
+  - {nfft: 256,  hop: 64,   win: "none"}
+  - {nfft: 256,  hop: 128,  win: "hann"}
+  - {nfft: 256,  hop: 64,   win: "hann"}
+  - {nfft: 512,  hop: 256,  win: "none"}
+  - {nfft: 512,  hop: 128,  win: "none"}
+  - {nfft: 512,  hop: 256,  win: "hann"}
+  - {nfft: 512,  hop: 128,  win: "hann"}
+  - {nfft: 1024, hop: 512,  win: "none"}
+  - {nfft: 1024, hop: 256,  win: "none"}
+  - {nfft: 1024, hop: 512,  win: "hann"}
+  - {nfft: 1024, hop: 256,  win: "hann"}
+
+outdir: "~/avr_tuning_logs/real_exp/whitenoise_bandpass/exp_1"
+mic_radius: 0.0365
+algo_name: "NormMUSIC"
