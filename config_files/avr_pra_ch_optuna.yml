@@ -2,9 +2,9 @@
 
 ### Path settings
 path:
-  expname: Pra_ch_param_0_1
+  expname: Pra_ch_optuna_param_0_1
   dataset_type: Real_env
-  logdir: logs/pra_ch/
+  logdir: logs/pra_ch_optuna/
 
 ### rendering settings
 render:

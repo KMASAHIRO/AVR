@@ -2,9 +2,9 @@
 
 ### Path settings
 path:
-  expname: Real_env_ch_param_0_1
+  expname: Real_env_ch_optuna_param_0_1
   dataset_type: Real_env
-  logdir: logs/real_env_ch/
+  logdir: logs/real_env_ch_optuna/
 
 ### rendering settings
 render:
