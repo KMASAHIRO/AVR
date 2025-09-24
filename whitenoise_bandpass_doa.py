@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-run_bp_doa_grid.py (pkl outputs + sorted overall summary)
+run_bp_doa_grid.py (resume-safe, pkl reuse, --force switch)
 
 - 単一npz内の 18×8ch freq-IR（pred/ori）から
   * 白色雑音×IRで観測合成（各seedで共通x）
   * Butterworth(4) bandpass → filtfilt（ゼロ位相）
   * 時間フレーミング（Tseg, overlap）
   * STFT-DoA（nfft, hop_size, window ∈ {none, hann}）
-  * フレーム角度を円平均 → サンプル代表角度
+  * 各フレーム角度を円平均 → サンプル代表角度
   * 誤差:
       - pred_vs_true_error: 幾何真値（tx位置）との角度差
       - pred_vs_gt_error:   同条件で ori-IRから求めた代表角度との差
 - 出力
   * 条件ごと: results.pkl（生データすべて; 統計の取り直し自在）
-  * まとめ: summary_all_conditions.csv（pred_vs_trueの平均昇順）
+  * まとめ: summary_all_conditions.csv（pred_vs_true平均の昇順）
 
 依存: numpy scipy pandas pyroomacoustics pyyaml
 """
@@ -59,11 +59,12 @@ class Config:
     bands: List[Dict[str, Any]]
     noise_seconds: List[float]
     segments_ms: List[float]
-    overlap_factors: List[float]       # for time framing (seg/hop)
+    overlap_factors: List[float]       # 例: [0.0, 0.25, 0.5] など（seg/hop を決める）
     stft_grid: List[Dict[str, Any]]    # {nfft, hop: samples, win: "none"/"hann"}
     outdir: str
     mic_radius: float = 0.0365
     algo_name: str = "NormMUSIC"
+    force: bool = False                # ← 追加：cfg 側にも反映可能に
 
 def load_config(path: str) -> Config:
     with open(path, "r") as f:
@@ -165,10 +166,59 @@ def doa_sample_from_frames(frames: List[np.ndarray], fs: int,
     return dict(est_deg=mu_deg, var_circ=var_circ, std_circ_deg=std_circ,
                 n_frames=n_frames, n_valid=n_valid, frame_angles_deg=frame_angles)
 
+# -------------------- サマリ生成（pkl→集計） --------------------
+
+def summarize_from_entries(condition_tag: str,
+                           band_name: str, low: float, high: float,
+                           Lw: float, Tseg_ms: float, ov: float,
+                           win_name: str, nfft_use: int, hop_use: int,
+                           entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+    df = pd.DataFrame([dict(
+        seed=e["seed"],
+        group=e["group"],
+        pred_vs_true_error=e["pred_vs_true_error"],
+        pred_vs_gt_error=e["pred_vs_gt_error"],
+        var_circ=e["pred"]["var_circ"],
+        std_circ_deg=e["pred"]["std_circ_deg"],
+    ) for e in entries])
+
+    valid_true = df[np.isfinite(df["pred_vs_true_error"])]
+    valid_gt   = df[np.isfinite(df["pred_vs_gt_error"])]
+
+    return dict(
+        condition=condition_tag,
+        band=band_name, low_hz=low, high_hz=high,
+        Lw_sec=Lw, Tseg_ms=float(Tseg_ms), overlap=float(ov),
+        stft_win=win_name, stft_nfft=nfft_use, stft_hop=hop_use,
+        n_total=len(df),
+        n_valid_true=int(len(valid_true)),
+        n_valid_gt=int(len(valid_gt)),
+        mean_pred_vs_true=float(valid_true["pred_vs_true_error"].mean()) if len(valid_true)>0 else float("nan"),
+        std_pred_vs_true=float(valid_true["pred_vs_true_error"].std(ddof=1)) if len(valid_true)>1 else float("nan"),
+        mean_pred_vs_gt=float(valid_gt["pred_vs_gt_error"].mean()) if len(valid_gt)>0 else float("nan"),
+        std_pred_vs_gt=float(valid_gt["pred_vs_gt_error"].std(ddof=1)) if len(valid_gt)>1 else float("nan"),
+        mean_var_circ=float(valid_true["var_circ"].mean()) if len(valid_true)>0 else float("nan"),
+        mean_std_circ_deg=float(valid_true["std_circ_deg"].mean()) if len(valid_true)>0 else float("nan"),
+    )
+
+def summarize_from_pkl(pkl_path: str) -> Dict[str, Any]:
+    with open(pkl_path, "rb") as f:
+        data = pickle.load(f)
+    meta = data["meta"]; entries = data["entries"]
+    return summarize_from_entries(
+        condition_tag=meta["condition"],
+        band_name=meta["band"], low=meta["low_hz"], high=meta["high_hz"],
+        Lw=meta["Lw_sec"], Tseg_ms=meta["Tseg_ms"], ov=meta["overlap"],
+        win_name=meta["stft_win"], nfft_use=meta["stft_nfft"], hop_use=meta["stft_hop"],
+        entries=entries
+    )
+
 # -------------------- メイン実験 --------------------
 
-def run_grid(cfg: Config):
+def run_grid(cfg: Config, force_cli: bool = False):
     fs = cfg.fs
+    force = bool(force_cli or cfg.force)
+
     H_pred, H_ori, pos_rx, pos_tx = load_npz_freq_ir(cfg.npz)
     groups_pred = groups_of_8(H_pred)
     groups_ori  = groups_of_8(H_ori) if H_ori is not None else [None]*len(groups_pred)
@@ -203,8 +253,19 @@ def run_grid(cfg: Config):
                         )
                         cond_dir = os.path.join(root, condition_tag)
                         _ensure_dir(cond_dir)
+                        pkl_path = os.path.join(cond_dir, "results.pkl")
 
-                        # ---- ここに生データ全部を溜める ----
+                        # 既存pklがあり、forceでなければ → 再計算スキップして集計だけ反映
+                        if os.path.isfile(pkl_path) and (not force):
+                            try:
+                                summary = summarize_from_pkl(pkl_path)
+                                overall_rows.append(summary)
+                                print("[SKIP reuse]", condition_tag, "n_valid_true:", summary["n_valid_true"])
+                                continue
+                            except Exception as e:
+                                print("[WARN] failed to reuse pkl; will recompute:", pkl_path, "err:", repr(e))
+
+                        # ---- ここに生データ全部を溜める（再計算パス or force時） ----
                         all_entries: List[Dict[str, Any]] = []
 
                         for seed in cfg.seeds:
@@ -225,7 +286,7 @@ def run_grid(cfg: Config):
                                     )
                                     true_deg = 0.0
 
-                                # ---- pred で観測合成 → 前処理 → フレーミング → DoA集約
+                                # pred 観測合成 → BP → フレーミング → DoA集約
                                 y_pred = synth_observation(ir_pred, x)
                                 y_pred_bp = apply_zero_phase_bp(y_pred, sos)
                                 frames_pred = sliding_frames(y_pred_bp, L, Hhop)
@@ -235,7 +296,7 @@ def run_grid(cfg: Config):
                                     mic_array, cfg.algo_name
                                 )
 
-                                # ---- ori があれば同じ手順で基準角（gt）を作る
+                                # ori があれば同じ手順で基準角（gt）
                                 gt_est_deg = None
                                 if ir_ori is not None:
                                     y_ori = synth_observation(ir_ori, x)
@@ -247,7 +308,8 @@ def run_grid(cfg: Config):
                                         mic_array, cfg.algo_name
                                     )
                                     gt_est_deg = ori_res["est_deg"]
-                                # ---- 誤差
+
+                                # 誤差
                                 err_true = (angular_error_deg(pred_res["est_deg"], true_deg)
                                             if np.isfinite(pred_res["est_deg"]) else float("nan"))
                                 err_gt = (angular_error_deg(pred_res["est_deg"], gt_est_deg)
@@ -271,7 +333,6 @@ def run_grid(cfg: Config):
                                 ))
 
                         # ---- 条件ごとの pkl 保存（生データ丸ごと）
-                        pkl_path = os.path.join(cond_dir, "results.pkl")
                         with open(pkl_path, "wb") as f:
                             pickle.dump(dict(
                                 meta=dict(
@@ -284,40 +345,14 @@ def run_grid(cfg: Config):
                                 entries=all_entries
                             ), f)
 
-                        # ---- まとめ（この条件の平均など → overallにだけ反映）
-                        df = pd.DataFrame([dict(
-                            seed=e["seed"],
-                            group=e["group"],
-                            pred_vs_true_error=e["pred_vs_true_error"],
-                            pred_vs_gt_error=e["pred_vs_gt_error"],
-                            var_circ=e["pred"]["var_circ"],
-                            std_circ_deg=e["pred"]["std_circ_deg"],
-                        ) for e in all_entries])
-
-                        valid_true = df[np.isfinite(df["pred_vs_true_error"])]
-                        valid_gt   = df[np.isfinite(df["pred_vs_gt_error"])]
-
-                        summary = dict(
-                            condition=condition_tag,
-                            band=band_name, low_hz=low, high_hz=high,
-                            Lw_sec=Lw, Tseg_ms=float(Tseg_ms), overlap=float(ov),
-                            stft_win=win_name, stft_nfft=nfft_use, stft_hop=hop_use,
-                            n_total=len(df),
-                            n_valid_true=int(len(valid_true)),
-                            n_valid_gt=int(len(valid_gt)),
-                            mean_pred_vs_true=float(valid_true["pred_vs_true_error"].mean()) if len(valid_true)>0 else float("nan"),
-                            std_pred_vs_true=float(valid_true["pred_vs_true_error"].std(ddof=1)) if len(valid_true)>1 else float("nan"),
-                            mean_pred_vs_gt=float(valid_gt["pred_vs_gt_error"].mean()) if len(valid_gt)>0 else float("nan"),
-                            std_pred_vs_gt=float(valid_gt["pred_vs_gt_error"].std(ddof=1)) if len(valid_gt)>1 else float("nan"),
-                            mean_var_circ=float(valid_true["var_circ"].mean()) if len(valid_true)>0 else float("nan"),
-                            mean_std_circ_deg=float(valid_true["std_circ_deg"].mean()) if len(valid_true)>0 else float("nan"),
+                        summary = summarize_from_entries(
+                            condition_tag, band_name, low, high, Lw, Tseg_ms, ov, win_name, nfft_use, hop_use, all_entries
                         )
                         overall_rows.append(summary)
                         print("[OK]", condition_tag, "n_valid_true:", summary["n_valid_true"])
 
-    # ---- 全条件まとめ（pred_vs_trueの平均 昇順でソート）
+    # ---- 全条件まとめ（pred_vs_trueの平均 昇順でソート；NaNは末尾）
     overall_df = pd.DataFrame(overall_rows)
-    # NaNは末尾になるように sort_values(na_position="last")
     overall_df = overall_df.sort_values(by=["mean_pred_vs_true"], ascending=True, na_position="last")
     out_csv = os.path.join(os.path.expanduser(cfg.outdir), "summary_all_conditions.csv")
     overall_df.to_csv(out_csv, index=False)
@@ -327,10 +362,11 @@ def run_grid(cfg: Config):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cfg", type=str, required=True)
+    ap.add_argument("--cfg", type=str, required=True, help="YAML config path")
+    ap.add_argument("--force", action="store_true", help="Recompute even if results.pkl exists")
     args = ap.parse_args()
     cfg = load_config(os.path.expanduser(args.cfg))
-    run_grid(cfg)
+    run_grid(cfg, force_cli=args.force)
 
 if __name__ == "__main__":
     main()
