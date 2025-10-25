@@ -1,0 +1,20 @@
+npz: ~/logs/real_exp/Real_env_optuna_param_37_1/val_result/val_iter013280.npz
+fs: 16000
+seeds: [0]
+long_noise_seconds: 100.0
+
+stft_grid:
+  - {nfft: 512,  hop: 256,  win: hann}
+  - {nfft: 512,  hop: 256,  win: none}
+  - {nfft: 1024, hop: 512,  win: hann}
+  - {nfft: 1024, hop: 512,  win: none}
+
+T_use_list: [16, 32, 64, 128, 256]
+
+# ← この項目は削除
+# slide_hop_frames: null
+
+outdir: ~/avr_tuning_logs/real_env_optuna/whitenoise_long/exp1
+algo_name: NormMUSIC
+mic_radius: 0.0365
+force: false
