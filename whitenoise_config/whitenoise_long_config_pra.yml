@@ -1,4 +1,4 @@
-npz: ~/logs/real_exp/Pra_optuna_param_5_1/val_result/val_iter014276.npz
+npz: ~/logs/pra_optuna/Pra_optuna_param_5_1/val_result/val_iter014276.npz
 fs: 16000
 seeds: [0]
 long_noise_seconds: 100.0

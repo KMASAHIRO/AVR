@@ -1,4 +1,4 @@
-npz: ~/logs/real_exp/Real_exp_ch_param_16_1/val_result/val_iter001162.npz
+npz: ~/logs/real_exp_ch/Real_exp_ch_param_16_1/val_result/val_iter001162.npz
 fs: 16000
 seeds: [0]
 long_noise_seconds: 100.0

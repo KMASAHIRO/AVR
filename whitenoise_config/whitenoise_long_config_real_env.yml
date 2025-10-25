@@ -1,4 +1,4 @@
-npz: ~/logs/real_exp/Real_env_optuna_param_37_1/val_result/val_iter013280.npz
+npz: ~/logs/real_env_optuna/Real_env_optuna_param_37_1/val_result/val_iter013280.npz
 fs: 16000
 seeds: [0]
 long_noise_seconds: 100.0
