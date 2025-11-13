@@ -62,7 +62,7 @@ class Config:
     outdir: str
     mic_radius: float = 0.0365
     algo_name: str = "NormMUSIC"
-    slide_hop_frames: Optional[int] = None  # 省略時は T_use//4
+    slide_hop_frames: Optional[int] = None
     force: bool = False
 
 def load_config(path: str) -> Config:
@@ -161,7 +161,7 @@ def run_condition_for_group(
     ir_pred: np.ndarray,
     ir_ori: Optional[np.ndarray],
     pos_rx_g: Optional[np.ndarray],
-    tx_pos: Optional[np.ndarray],
+    pos_tx_g: Optional[np.ndarray],
     x_long: np.ndarray,
     fs: int,
     stft_cfg: Dict[str, Any],
@@ -171,9 +171,9 @@ def run_condition_for_group(
     slide_hop_frames: Optional[int],
 ) -> Dict[str, Any]:
     # mic & true angle
-    if pos_rx_g is not None and tx_pos is not None:
+    if pos_rx_g is not None and pos_tx_g is not None:
         mic_array, mic_center = build_mic_array_from_group_positions(pos_rx_g, mic_radius)
-        true_deg = compute_true_deg(tx_pos[0], mic_center)  # グループ先頭tx
+        true_deg = compute_true_deg(pos_tx_g[0], mic_center)  # グループ先頭tx
     else:
         mic_array = pra.beamforming.circular_2D_array(center=(0.0, 0.0), M=8, radius=mic_radius, phi0=np.pi/2)
         true_deg = 0.0
@@ -232,7 +232,8 @@ def run_grid(cfg: Config, force_cli: bool = False):
     H_pred, H_ori, pos_rx, pos_tx = load_npz_freq_ir(cfg.npz)
     groups_pred = groups_of_8(H_pred)                     # len = 18
     groups_ori  = groups_of_8(H_ori) if H_ori is not None else [None]*len(groups_pred)
-    groups_pos  = groups_of_8(pos_rx) if pos_rx is not None else [None]*len(groups_pred)
+    groups_pos_rx  = groups_of_8(pos_rx) if pos_rx is not None else [None]*len(groups_pred)
+    groups_pos_tx  = groups_of_8(pos_tx) if pos_tx is not None else [None]*len(groups_pred)
 
     root = os.path.expanduser(cfg.outdir); _ensure_dir(root)
     with open(os.path.join(root, "config_effective.yaml"), "w") as f:
@@ -290,10 +291,10 @@ def run_grid(cfg: Config, force_cli: bool = False):
 
                 # ---- 再計算 ----
                 all_entries: List[Dict[str, Any]] = []
-                for g_idx, (ir_pred, ir_ori, pos_rx_g) in enumerate(zip(groups_pred, groups_ori, groups_pos), start=1):
+                for g_idx, (ir_pred, ir_ori, pos_rx_g, pos_tx_g) in enumerate(zip(groups_pred, groups_ori, groups_pos_rx, groups_pos_tx), start=1):
                     rec = run_condition_for_group(
                         ir_pred=ir_pred, ir_ori=ir_ori,
-                        pos_rx_g=pos_rx_g, tx_pos=pos_tx,
+                        pos_rx_g=pos_rx_g, pos_tx_g=pos_tx_g,
                         x_long=x_long, fs=fs,
                         stft_cfg=dict(nfft=nfft_use, hop=hop_use, win=win_name),
                         algo_name=cfg.algo_name, mic_radius=cfg.mic_radius,

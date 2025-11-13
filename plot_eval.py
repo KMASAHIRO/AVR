@@ -69,17 +69,31 @@ def run_doa_on_npz(
         pred_time = torch.real(torch.fft.irfft(torch.tensor(pred_group), dim=-1)).cpu().numpy()
         ori_time = torch.real(torch.fft.irfft(torch.tensor(ori_group), dim=-1)).cpu().numpy()
 
-        def compute_stft(signals):
-            return np.array([
-                pra.transform.stft.analysis(sig, n_fft, n_fft // 2)
-                for sig in signals
-            ])
+        # def compute_stft(signals):
+        #     return np.array([
+        #         pra.transform.stft.analysis(sig, n_fft, n_fft // 2)
+        #         for sig in signals
+        #     ])
+        #
+        #X_pred = compute_stft(pred_time)
+        #X_ori = compute_stft(ori_time)
+        #
+        #X_pred = np.transpose(X_pred, (0, 2, 1))
+        #X_ori = np.transpose(X_ori, (0, 2, 1))
 
-        X_pred = compute_stft(pred_time)
-        X_ori = compute_stft(ori_time)
-
-        X_pred = np.transpose(X_pred, (0, 2, 1))
-        X_ori = np.transpose(X_ori, (0, 2, 1))
+        def stft_full(y: np.ndarray) -> np.ndarray:
+            """(G, Nt) → (G, F, T)"""
+            X = librosa.stft(
+                y,
+                n_fft=n_fft,
+                hop_length=n_fft // 4,
+                window="hann",
+                center=True,
+            )
+            return X.astype(np.complex64)
+        
+        X_pred = stft_full(pred_time)
+        X_ori = stft_full(ori_time)
 
         for algo in algo_names:
             try:

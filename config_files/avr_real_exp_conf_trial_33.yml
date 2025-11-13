@@ -1,0 +1,70 @@
+model:
+  dir_encoding_sig:
+    base_resolution: 16
+    log2_hashmap_size: 18
+    n_features_per_level: 2
+    n_levels: 20
+    otype: HashGrid
+  leaky_relu: 0.03
+  pos_encoding_sigma:
+    base_resolution: 16
+    log2_hashmap_size: 18
+    n_features_per_level: 2
+    n_levels: 20
+    otype: HashGrid
+  sigma_decoder_network:
+    activation: ReLU
+    n_hidden_layers: 3
+    n_neurons: 32
+    otype: CutlassMLP
+    output_activation: None
+  sigma_encoder_network:
+    activation: ReLU
+    n_hidden_layers: 3
+    n_neurons: 32
+    otype: CutlassMLP
+    output_activation: None
+  signal_network:
+    activation: ReLU
+    n_hidden_layers: 3
+    n_neurons: 128
+    otype: CutlassMLP
+    output_activation: None
+  signal_output_dim: 1600
+  tx_encoding_sig:
+    base_resolution: 16
+    log2_hashmap_size: 18
+    n_features_per_level: 2
+    n_levels: 20
+    otype: HashGrid
+path:
+  dataset_type: Real_env
+  expname: Real_exp_param_34_3
+  logdir: logs/real_exp/
+render:
+  far: 6
+  fs: 16000
+  n_azi: 50
+  n_ele: 32
+  n_samples: 59
+  near: 0
+  pathloss: 1.5
+  speed: 343.8
+  xyz_max: 10
+  xyz_min: 0
+train:
+  T_max: 33200
+  amplitude_loss_weight: 4
+  angle_loss_weight: 99.29641242101407
+  batch_size: 2
+  energy_loss_weight: 95.17156675913785
+  eta_min: 2.8545321160788084e-08
+  load_ckpt: false
+  lr: 1.3410676006271603e-06
+  multistft_loss_weight: 99.64470415621409
+  save_freq: 664
+  spec_loss_weight: 98.59569146302502
+  time_loss_weight: 37.31375004824453
+  total_iterations: 33200
+  val_freq: 664
+  weight_decay: 0.0005490151450731119
