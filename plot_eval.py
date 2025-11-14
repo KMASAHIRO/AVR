@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import math
 import pyroomacoustics as pra
+import librosa
 
 def angular_error_deg(est_deg, ref_deg):
     return min(abs(est_deg - ref_deg), 360 - abs(est_deg - ref_deg))

@@ -57,10 +57,10 @@ def _closest_value_at_step(step_to_val: Dict[int, float], target_step: int) -> O
 
 def _load_mean_error_and_iter_from_pkl(
     pkl_path: str, algo_name: str, error_key: str
-) -> Optional[Tuple[float, int]]:
+) -> Optional[Tuple[float, float, int]]:
     """
-    val_iterN.pkl を読み、指定アルゴリズムの誤差リスト（None除去）の **平均値** と、
-    その pkl の iter 番号（ファイル名から取得）を返す。
+    val_iterN.pkl を読み、指定アルゴリズムの誤差リスト（None除去）の
+    **平均値** と **標準偏差**、その pkl の iter 番号（ファイル名から取得）を返す。
     """
     try:
         with open(pkl_path, "rb") as f:
@@ -69,10 +69,11 @@ def _load_mean_error_and_iter_from_pkl(
         errs = [e for e in errs if e is not None]
         if len(errs) == 0:
             return None
-        mean_err = float(np.mean(errs))  # ★ 平均で集計
+        mean_err = float(np.mean(errs))
+        std_err = float(np.std(errs))
         m = re.search(r"val_iter(\d+)\.pkl$", os.path.basename(pkl_path))
         it = int(m.group(1)) if m else -1
-        return (mean_err, it)
+        return (mean_err, std_err, it)
     except Exception:
         return None
 
@@ -93,11 +94,12 @@ def plot_trialwise_doa_mean_and_losses_discovered(
     - 横軸: trial（例: Real_exp_param_{i}_1）
     - 各 trial について:
         - DoA結果: {logdir}/{trial}/doa_results/val_iter*.pkl を走査
-          → **各pklの平均誤差**を計算 → その平均が最小の iter を採用
+          → **各pklの平均誤差**と**標準偏差**を計算 → その平均が最小の iter を採用
         - TBイベント: find_tensorboard_event_file() を用いて探索
         - 採用 iter に最も近い step の train/val loss を取得
     - グラフ保存 + CSV保存
     - skip_missing=True のとき、必須情報が欠ける trial は **完全に除外**（CSV/図に出さない）
+    - プロットは DoA error のみ（loss は計算・CSV保存のみ）
     """
     os.makedirs(os.path.dirname(csv_output_path) or ".", exist_ok=True)
     os.makedirs(os.path.dirname(figure_output_path) or ".", exist_ok=True)
@@ -114,6 +116,7 @@ def plot_trialwise_doa_mean_and_losses_discovered(
     trial_idx = []
     trial_labels = []
     doa_means = []
+    doa_stds = []
     train_losses_at_mean = []
     val_losses_at_mean = []
 
@@ -125,14 +128,14 @@ def plot_trialwise_doa_mean_and_losses_discovered(
 
         # --- DoA 平均誤差 & iter 探索（min-of-mean） ---
         pkl_files = sorted(glob.glob(os.path.join(doa_save_dir, "val_iter*.pkl")))
-        best_err, best_iter = None, None
+        best_err, best_std, best_iter = None, None, None
         for p in pkl_files:
             res = _load_mean_error_and_iter_from_pkl(p, algo_name, error_key)
             if res is None:
                 continue
-            err, it = res
+            err, std, it = res
             if best_err is None or err < best_err:
-                best_err, best_iter = err, it
+                best_err, best_std, best_iter = err, std, it
 
         # --- TensorBoard イベント探索（参照ロジック） ---
         event_path = None
@@ -168,6 +171,7 @@ def plot_trialwise_doa_mean_and_losses_discovered(
         trial_idx.append(next_index)
         trial_labels.append(expname)
         doa_means.append(best_err if best_err is not None else np.nan)
+        doa_stds.append(best_std if best_std is not None else np.nan)
         train_losses_at_mean.append(tr_loss_at_mean if tr_loss_at_mean is not None else np.nan)
         val_losses_at_mean.append(va_loss_at_mean if va_loss_at_mean is not None else np.nan)
 
@@ -176,6 +180,7 @@ def plot_trialwise_doa_mean_and_losses_discovered(
             "trial_name": expname,
             "val_iter_at_doa_mean": best_iter if best_iter is not None else np.nan,
             "doa_mean_error_deg": best_err if best_err is not None else np.nan,
+            "doa_std_error_deg": best_std if best_std is not None else np.nan,
             "train_loss_at_doa_mean": tr_loss_at_mean if tr_loss_at_mean is not None else np.nan,
             "val_loss_at_doa_mean": va_loss_at_mean if va_loss_at_mean is not None else np.nan,
             "doa_dir": doa_save_dir,
@@ -191,32 +196,18 @@ def plot_trialwise_doa_mean_and_losses_discovered(
     df = pd.DataFrame(rows)
     df.to_csv(csv_output_path, index=False)
 
-    # --- 描画（横軸=trial index、目盛は10ごと／右軸グリッド） ---
-    fig, ax1 = plt.subplots(figsize=(14, 6))
+    # --- 描画（横軸=trial index、DoA error のみプロット） ---
+    fig, ax = plt.subplots(figsize=(14, 6))
 
-    # 左軸：Loss
-    ax1.set_xlabel("Trial Index")
-    ax1.set_ylabel("Loss", color="black")
-    ax1.plot(trial_idx, train_losses_at_mean, marker="o", label="Train Loss @ DoA mean")
-    ax1.plot(trial_idx, val_losses_at_mean, marker="o", label="Val Loss @ DoA mean")
-    ax1.tick_params(axis="y", labelcolor="black")
-    ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
-    ax1.grid(False)  # 左軸グリッドはOFF
+    ax.set_xlabel("Trial Index")
+    ax.set_ylabel("DoA Mean Error (°)")
+    ax.plot(trial_idx, doa_means, marker="s", linewidth=2, label="DoA mean error")
 
-    # 右軸：DoA（緑固定）
-    ax2 = ax1.twinx()
-    ax2.set_ylabel("DoA Mean Error (°)")
-    ax2.plot(trial_idx, doa_means, marker="s", label="DoA mean", linewidth=2, color="green")
-    ax2.set_ylim(*ylim_doa)
-    ax2.tick_params(axis="y")
-    ax2.grid(True, axis="y", alpha=0.3)  # 右軸の目盛りに揃うグリッド
-
-    # 凡例（左右統合）
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
+    # y 軸範囲
+    ax.set_ylim(*ylim_doa)
 
     # x 軸は trial index（1,2,3,...）で、目盛は 10 ごとに表示
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     N = len(trial_idx)
     if N <= 10:
         ticks = trial_idx  # 少ないときは全部表示
@@ -229,17 +220,21 @@ def plot_trialwise_doa_mean_and_losses_discovered(
             ticks = [start] + ticks
         if ticks[-1] != end:
             ticks.append(end)
-    ax1.set_xticks(ticks)   # 数値そのまま（ラベル文字列にはしない）
+    ax.set_xticks(ticks)
 
-    plt.title("Trial-wise DoA Mean Error and Loss (at DoA mean)")
+    ax.grid(True, axis="both", alpha=0.3)
+    ax.legend(loc="upper right")
+
+    plt.title("Trial-wise DoA Mean Error (at DoA mean)")
     plt.tight_layout()
     plt.savefig(figure_output_path, dpi=300)
     plt.close()
 
+
 # ====== CLI ======
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Plot trial-wise DoA mean error and losses (trial axis), with optional skipping."
+        description="Plot trial-wise DoA mean error (trial axis), with optional skipping."
     )
     parser.add_argument("--tensorboard_logdir", type=str, default="tensorboard_logs",
                         help="Base directory of TensorBoard logs (e.g., tensorboard_logs)")
